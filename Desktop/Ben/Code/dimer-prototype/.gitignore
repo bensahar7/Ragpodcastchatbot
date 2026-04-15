@@ -1,0 +1,7 @@
+node_modules/
+.claude/
+.agents/
+.design/
+context/
+prd-proactive-loop.md
+skills-lock.json

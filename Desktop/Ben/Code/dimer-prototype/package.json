@@ -1,0 +1,9 @@
+{
+  "name": "dimer-prototype",
+  "version": "1.0.0",
+  "description": "Dimer Health — Transitionist Dashboard prototype",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "npm run dev"
+  }
+}

@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dimer Health — Transitionist Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+
+/* ═══════════════════════════════════════════
+   1. RESET
+═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { font: inherit; cursor: pointer; border: none; background: none; }
+svg { display: block; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════
+   2. DESIGN TOKENS
+═══════════════════════════════════════════ */
+:root {
+  /* Brand Primitives */
+  --brand-purple:         #8054F1;
+  --brand-purple-light:   #9B72F5;
+  --brand-purple-dark:    #4037A0;
+  --brand-purple-tint:    #F0EBFE;
+  --brand-dark:           #1A193B;
+  --brand-lavender-light: #F8F4FF;
+  --brand-lavender-mid:   #EAE8FD;
+  --brand-green:          #A1E974;
+  --brand-red:            #D42C2C;
+
+  /* Semantic Background */
+  --color-bg-page:        #F3F2FA;
+  --color-bg-nav:         #1A193B;
+  --color-bg-surface:     #FFFFFF;
+  --color-bg-hover:       #F0EDFB;
+  --color-bg-selected:    #E8E3F8;
+
+  /* Semantic Text */
+  --color-text-primary:   #1A193B;
+  --color-text-secondary: #4A4763;
+  --color-text-tertiary:  #9492A8;
+  --color-text-inverse:   #FFFFFF;
+
+  /* Borders */
+  --color-border-default: #E5E3F0;
+  --color-border-strong:  #C5C2D8;
+
+  /* Accent */
+  --color-accent:         #8054F1;
+  --color-accent-hover:   #6B3FDD;
+
+  /* Risk Colors */
+  --color-risk-high:      #C0392B;
+  --color-risk-high-tint: #FEF2F2;
+  --color-risk-medium:    #D97706;
+  --color-risk-medium-tint:#FFFBEB;
+  --color-risk-low:       #A1E974;
+  --color-risk-low-text:  #1A193B;
+
+  /* Signal Calendar */
+  --color-signal-ok:       #A1E974;
+  --color-signal-concern:  #F59E0B;
+  --color-signal-chat:     #8054F1;
+  --color-signal-silent:   #C0392B;
+  --color-signal-empty:    #E5E3F0;
+
+  /* Silent State */
+  --color-silent:          #C0392B;
+  --color-silent-tint:     #FEF2F2;
+  --color-silent-border:   #FECACA;
+  --color-silent-text:     #991B1B;
+
+  /* Typography */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Layout */
+  --nav-h:   56px;
+  --stat-h:  80px;
+  --panel-w: 400px;
+  --row-h:   72px;
+  --fixed-h: calc(var(--nav-h) + var(--stat-h));
+
+  /* Radii */
+  --r-xs:   4px;
+  --r-sm:   6px;
+  --r-md:   10px;
+  --r-lg:   14px;
+  --r-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm:    0 1px 3px rgba(26,25,59,.06), 0 1px 2px rgba(26,25,59,.04);
+  --shadow-md:    0 4px 12px rgba(26,25,59,.08), 0 2px 4px rgba(26,25,59,.04);
+  --shadow-panel: -1px 0 0 #E5E3F0, -8px 0 32px rgba(26,25,59,.09);
+  --shadow-focus: 0 0 0 3px rgba(128,84,241,.25);
+
+  /* Motion */
+  --t-fast:   150ms cubic-bezier(.4,0,.2,1);
+  --t-normal: 220ms cubic-bezier(0,0,.2,1);
+}
+
+/* ═══════════════════════════════════════════
+   3. BASE
+═══════════════════════════════════════════ */
+html, body {
+  height: 100%;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-page);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════
+   4. LAYOUT
+═══════════════════════════════════════════ */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#nav {
+  height: var(--nav-h);
+  flex-shrink: 0;
+  background: var(--color-bg-nav);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  position: relative;
+  z-index: 200;
+}
+
+#stat-bar {
+  height: var(--stat-h);
+  flex-shrink: 0;
+  background: var(--color-bg-surface);
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--color-border-default);
+  position: relative;
+  z-index: 150;
+}
+
+#main-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+}
+
+#queue-column {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: padding-right var(--t-normal);
+  background: var(--color-bg-page);
+}
+
+#queue-column.panel-open {
+  padding-right: var(--panel-w);
+}
+
+/* ═══════════════════════════════════════════
+   5. NAV BAR
+═══════════════════════════════════════════ */
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.nav-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, #8B6AF6 0%, #4037A0 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.nav-dimer {
+  font-size: 17px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.03em;
+}
+
+.nav-health {
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255,255,255,.45);
+  letter-spacing: 0;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-bell {
+  color: rgba(255,255,255,.4);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  transition: color var(--t-fast);
+}
+.nav-bell:hover { color: rgba(255,255,255,.7); }
+
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.nav-user-info {
+  text-align: right;
+}
+
+.nav-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,.9);
+  line-height: 1.2;
+}
+
+.nav-user-role {
+  font-size: 11px;
+  color: rgba(255,255,255,.4);
+  letter-spacing: .02em;
+}
+
+.nav-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-full);
+  background: linear-gradient(135deg, #8054F1 0%, #4037A0 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: .02em;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════
+   6. STAT BAR
+═══════════════════════════════════════════ */
+.kpi-tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 28px;
+  border-right: 1px solid var(--color-border-default);
+  transition: background var(--t-fast);
+}
+
+.kpi-tile:last-child { border-right: none; }
+
+.kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+  letter-spacing: -0.03em;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-top: 3px;
+}
+
+.kpi-tile--alert .kpi-value { color: var(--color-silent); }
+.kpi-tile--alert { background: var(--color-silent-tint); }
+
+.kpi-tile--warn .kpi-value { color: var(--color-risk-medium); }
+.kpi-tile--warn { background: var(--color-risk-medium-tint); }
+
+/* ═══════════════════════════════════════════
+   7. QUEUE
+═══════════════════════════════════════════ */
+.queue-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-bg-page);
+  padding: 16px 24px 12px;
+  border-bottom: 1px solid var(--color-border-default);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.queue-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.queue-date {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 1px;
+}
+
+.queue-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.queue-sort {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  letter-spacing: .02em;
+}
+
+/* ═══════════════════════════════════════════
+   8. PATIENT ROW
+═══════════════════════════════════════════ */
+.patient-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 0 12px;
+  padding: 0 20px 0 0;
+  padding-left: calc(12px + 4px); /* 4px for border slot */
+  height: var(--row-h);
+  border-left: 4px solid transparent;
+  border-bottom: 1px solid var(--color-border-default);
+  cursor: pointer;
+  background: var(--color-bg-surface);
+  transition: background var(--t-fast), border-color var(--t-fast);
+  user-select: none;
+  /* entrance animation — rows are visible by default, animation is additive */
+  opacity: 1;
+  animation: row-in .3s ease-out forwards;
+}
+
+.patient-row:last-child { border-bottom: none; }
+
+.patient-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.patient-row.row-selected {
+  background: var(--color-bg-selected);
+  border-left-color: var(--color-accent);
+}
+
+.patient-row.row-silent {
+  border-left-color: var(--color-silent);
+}
+
+.patient-row.row-silent.row-selected {
+  border-left-color: var(--color-silent);
+}
+
+.patient-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-full);
+  background: var(--brand-lavender-mid);
+  color: var(--brand-purple);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: .02em;
+  flex-shrink: 0;
+}
+
+.patient-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.patient-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.patient-procedure {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.patient-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════
+   9. BADGES & INDICATORS
+═══════════════════════════════════════════ */
+.days-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--brand-lavender-light);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+
+.signal-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.signal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.signal-ok    .signal-dot { background: var(--color-signal-ok); }
+.signal-concern .signal-dot { background: var(--color-signal-concern); }
+.signal-chat  .signal-dot { background: var(--color-signal-chat); }
+
+.signal-concern { color: #92400E; }
+.signal-none    { color: var(--color-text-tertiary); font-style: normal; }
+
+/* Risk Badges */
+.risk-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.risk-high   { background: var(--color-risk-high);   color: #FFFFFF; }
+.risk-medium { background: var(--color-risk-medium); color: #FFFFFF; }
+.risk-low    { background: var(--color-risk-low);    color: var(--color-risk-low-text); }
+
+/* High Risk pulse */
+@keyframes risk-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,.35); }
+  60%       { box-shadow: 0 0 0 5px rgba(192,57,43,0); }
+}
+.risk-high { animation: risk-pulse 2.4s ease-in-out infinite; }
+
+/* Silent Badge */
+.silent-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  background: var(--color-silent);
+  color: #FFFFFF;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Larger badge variant (used in panel) */
+.risk-badge.badge-lg {
+  font-size: 13px;
+  padding: 5px 14px;
+  letter-spacing: .04em;
+}
+
+/* ═══════════════════════════════════════════
+   10. DETAIL PANEL SHELL
+═══════════════════════════════════════════ */
+#detail-panel {
+  position: fixed;
+  right: 0;
+  top: var(--fixed-h); /* nav + stat bar = 136px */
+  bottom: 0;
+  width: var(--panel-w);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-panel);
+  transform: translateX(100%);
+  transition: transform var(--t-normal);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#detail-panel.open {
+  transform: translateX(0);
+}
+
+/* Panel Header */
+.panel-header {
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--color-border-default);
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--color-bg-surface);
+}
+
+.panel-header-info { min-width: 0; flex: 1; }
+
+#panel-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+  letter-spacing: -.02em;
+}
+
+#panel-sub {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.close-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t-fast), color var(--t-fast);
+  flex-shrink: 0;
+  margin-top: -2px;
+}
+
+.close-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* Panel Body */
+#panel-body {
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Panel Footer */
+.panel-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border-default);
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  background: var(--color-bg-surface);
+}
+
+/* ═══════════════════════════════════════════
+   11. PANEL SECTIONS
+═══════════════════════════════════════════ */
+.panel-section {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.panel-section:last-child { border-bottom: none; }
+
+.section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--color-text-tertiary);
+  margin-bottom: 12px;
+}
+
+/* Silent Banner */
+.silent-banner {
+  margin: 16px 20px 0;
+  padding: 12px 14px;
+  background: var(--color-silent-tint);
+  border: 1px solid var(--color-silent-border);
+  border-left: 3px solid var(--color-silent);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.silent-banner-icon {
+  color: var(--color-silent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.silent-banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-silent-text);
+  line-height: 1.3;
+}
+
+.silent-banner-sub {
+  font-size: 12px;
+  color: var(--color-silent);
+  margin-top: 2px;
+  opacity: .8;
+}
+
+/* ═══════════════════════════════════════════
+   12. 7-DAY CALENDAR
+═══════════════════════════════════════════ */
+.cal-squares {
+  display: flex;
+  gap: 5px;
+}
+
+.cal-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+
+.calendar-square {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-xs);
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+  cursor: default;
+  min-width: 32px;
+  max-width: 46px;
+}
+
+.calendar-square:hover {
+  transform: scale(1.08);
+  box-shadow: var(--shadow-md);
+}
+
+.cal-ok      { background: var(--color-signal-ok); }
+.cal-concern { background: var(--color-signal-concern); }
+.cal-chat    { background: var(--color-signal-chat); }
+.cal-silent  { background: var(--color-signal-silent); }
+.cal-empty   { background: var(--color-signal-empty); }
+
+.cal-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+
+/* Calendar Legend */
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-default);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════
+   13. PANEL CONTENT COMPONENTS
+═══════════════════════════════════════════ */
+/* Cura */
+.cura-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cura-note {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* AiME */
+.aime-quote {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  padding: 10px 14px;
+  background: var(--brand-lavender-light);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+
+.aime-meta {
+  display: block;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  margin-top: 7px;
+}
+
+.aime-empty {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+/* Contact */
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clinician-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-full);
+  background: var(--brand-dark);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: .02em;
+}
+
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contact-clinician {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.contact-meta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* ═══════════════════════════════════════════
+   14. BUTTONS
+═══════════════════════════════════════════ */
+.btn-primary {
+  flex: 1;
+  height: 40px;
+  background: var(--color-accent);
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background var(--t-fast), transform var(--t-fast), opacity var(--t-fast);
+  letter-spacing: .01em;
+}
+
+.btn-primary:hover { background: var(--color-accent-hover); }
+.btn-primary:active { transform: scale(.98); }
+.btn-primary:disabled { opacity: .7; cursor: not-allowed; }
+
+.btn-primary.btn-calling {
+  background: #2D6A4F;
+}
+
+.btn-secondary {
+  flex: 1;
+  height: 40px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--color-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background var(--t-fast), border-color var(--t-fast);
+  letter-spacing: .01em;
+}
+
+.btn-secondary:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-text-secondary);
+}
+
+/* ═══════════════════════════════════════════
+   15. ANIMATIONS
+═══════════════════════════════════════════ */
+@keyframes row-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Safety: if animation can't run (reduced motion, old browser), rows are visible */
+@media (prefers-reduced-motion: reduce) {
+  .patient-row { animation: none; opacity: 1; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════
+   16. ACCESSIBILITY
+═══════════════════════════════════════════ */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.patient-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.close-btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* ═══════════════════════════════════════════
+   17. RESPONSIVE — TABLET (≤768px)
+═══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  #detail-panel {
+    width: 100%;
+    height: 88vh;
+    top: auto;
+    bottom: 0;
+    right: 0;
+    border-radius: 16px 16px 0 0;
+    transform: translateY(105%);
+    box-shadow: 0 -4px 32px rgba(26,25,59,.14);
+    transition: transform var(--t-normal);
+  }
+
+  #detail-panel.open {
+    transform: translateY(0);
+  }
+
+  #queue-column.panel-open {
+    padding-right: 0;
+  }
+
+  .nav-user-info { display: none; }
+  .nav-health    { display: none; }
+
+  .kpi-label { font-size: 10px; letter-spacing: .04em; }
+  .kpi-value { font-size: 22px; }
+
+  .patient-meta { gap: 6px; }
+  .signal-indicator { display: none; }
+
+  .queue-header { padding: 12px 16px; }
+  .patient-row  { padding-left: calc(10px + 4px); padding-right: 14px; }
+}
+
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── ZONE 1: NAV BAR ── -->
+  <nav id="nav" role="banner">
+    <a class="nav-logo" href="#" aria-label="Dimer Health home">
+      <div class="nav-icon-wrap" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <polyline points="1,10 5,10 7.5,4 10,16 12.5,7 15,10 19,10"
+                    stroke="white" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="nav-wordmark">
+        <span class="nav-dimer">dimer</span>
+        <span class="nav-health">health</span>
+      </div>
+    </a>
+
+    <div class="nav-right">
+      <button class="nav-bell" aria-label="Notifications" title="Notifications">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 2a5 5 0 00-5 5v2.5L2 12v1h14v-1l-2-2.5V7a5 5 0 00-5-5z"/>
+          <path d="M7.5 15a1.5 1.5 0 003 0"/>
+        </svg>
+      </button>
+      <div class="nav-user">
+        <div class="nav-user-info">
+          <div class="nav-user-name">Sarah Chen</div>
+          <div class="nav-user-role">Transitionist</div>
+        </div>
+        <div class="nav-avatar" aria-hidden="true">SC</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── ZONE 2: STAT BAR ── -->
+  <div id="stat-bar" role="region" aria-label="Today's summary">
+    <div class="kpi-tile" aria-label="8 patients active today">
+      <div class="kpi-value">8</div>
+      <div class="kpi-label">Active Today</div>
+    </div>
+    <div class="kpi-tile kpi-tile--alert" aria-label="2 patients silent for 48 hours or more">
+      <div class="kpi-value">2</div>
+      <div class="kpi-label">Silent 48h+</div>
+    </div>
+    <div class="kpi-tile kpi-tile--warn" aria-label="4 high risk patients">
+      <div class="kpi-value">4</div>
+      <div class="kpi-label">High Risk</div>
+    </div>
+  </div>
+
+  <!-- ── ZONE 3 + 4: MAIN CONTENT ── -->
+  <div id="main-content">
+
+    <!-- Queue Column -->
+    <div id="queue-column" role="main">
+      <div class="queue-header">
+        <div class="queue-title-wrap">
+          <h1 class="queue-title">Today's Queue</h1>
+          <span class="queue-date">Tuesday, April 15, 2026</span>
+        </div>
+        <span class="queue-sort">Sorted by: Risk · Silence</span>
+      </div>
+      <div id="patient-list" role="list" aria-label="Patient queue"></div>
+    </div>
+
+    <!-- Detail Panel -->
+    <aside id="detail-panel" role="complementary" aria-label="Patient detail" aria-hidden="true">
+      <div class="panel-header">
+        <div class="panel-header-info">
+          <div id="panel-name" class="panel-patient-name">—</div>
+          <div id="panel-sub" class="panel-patient-sub">—</div>
+        </div>
+        <button id="close-panel" class="close-btn" aria-label="Close patient detail">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M12 4L4 12M4 4l8 8"/>
+          </svg>
+        </button>
+      </div>
+      <div id="panel-body"></div>
+      <div class="panel-footer">
+        <button class="btn-primary" id="btn-call" aria-label="Call patient">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 2h3l1.5 3.5-1.8 1.1a9 9 0 004.7 4.7l1.1-1.8L14 11v3a1 1 0 01-1 1A12 12 0 011 3a1 1 0 011-1z"/>
+          </svg>
+          Call Now
+        </button>
+        <button class="btn-secondary" id="btn-note" aria-label="Add note">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.5 1.5a1.414 1.414 0 012 2L4 11l-3 1 1-3 7.5-7.5z"/>
+          </svg>
+          Add Note
+        </button>
+      </div>
+    </aside>
+
+  </div><!-- /main-content -->
+
+</div><!-- /app -->
+
+<script>
+/* ═══════════════════════════════════════════
+   PATIENT DATA
+═══════════════════════════════════════════ */
+const patients = [
+  {
+    id: 1,
+    name: 'Robert Stein',
+    initials: 'RS',
+    age: 72,
+    procedure: 'Knee replacement',
+    day: 3,
+    silent: true,
+    silentHours: 52,
+    risk: 'high',
+    lastSignalLabel: null,
+    lastSignalType: null,
+    // 7 days oldest → newest. Today = index 6.
+    calendar: ['ok','ok','ok','ok','ok','silent','silent'],
+    curaNote: 'Elevated due to: no response (52h) · prior osteoarthritis · Day 3 high-risk window',
+    aiMe: null,
+    lastContact: { date: 'April 12', type: 'Video call', clinician: 'Dr. Greenhut', initials: 'DG' }
+  },
+  {
+    id: 2,
+    name: 'Margaret Kovacs',
+    initials: 'MK',
+    age: 79,
+    procedure: 'Hip fracture repair',
+    day: 2,
+    silent: true,
+    silentHours: 48,
+    risk: 'high',
+    lastSignalLabel: null,
+    lastSignalType: null,
+    calendar: ['empty','ok','ok','ok','ok','silent','silent'],
+    curaNote: 'Elevated due to: no response (48h) · age 79 · fall-related fracture · Day 2',
+    aiMe: null,
+    lastContact: { date: 'April 13', type: 'Call', clinician: 'Carrie', initials: 'CA' }
+  },
+  {
+    id: 3,
+    name: 'Frank Navarro',
+    initials: 'FN',
+    age: 68,
+    procedure: 'Cardiac bypass',
+    day: 5,
+    silent: false,
+    silentHours: 0,
+    risk: 'high',
+    lastSignalLabel: 'Tapped okay · 6h ago',
+    lastSignalType: 'ok',
+    calendar: ['empty','empty','ok','ok','ok','ok','ok'],
+    curaNote: 'Elevated due to: cardiac procedure · Day 5 post-op window · monitoring fluid retention',
+    aiMe: null,
+    lastContact: { date: 'April 11', type: 'Video call', clinician: 'Dr. Greenhut', initials: 'DG' }
+  },
+  {
+    id: 4,
+    name: 'Dorothy Mills',
+    initials: 'DM',
+    age: 74,
+    procedure: 'Colectomy',
+    day: 7,
+    silent: false,
+    silentHours: 0,
+    risk: 'high',
+    lastSignalLabel: 'Tapped okay · 3h ago',
+    lastSignalType: 'ok',
+    calendar: ['ok','ok','ok','ok','ok','ok','ok'],
+    curaNote: 'Elevated due to: post-surgical infection risk window · temperature reported on Day 5',
+    aiMe: null,
+    lastContact: { date: 'April 10', type: 'Video call', clinician: 'Dr. Greenhut', initials: 'DG' }
+  },
+  {
+    id: 5,
+    name: 'Harold Chen',
+    initials: 'HC',
+    age: 66,
+    procedure: 'Spinal fusion',
+    day: 4,
+    silent: false,
+    silentHours: 0,
+    risk: 'medium',
+    lastSignalLabel: 'Tapped okay · 1h ago',
+    lastSignalType: 'ok',
+    calendar: ['empty','ok','ok','ok','ok','ok','ok'],
+    curaNote: 'Stable · monitoring post-surgical mobility and nerve sensation',
+    aiMe: null,
+    lastContact: { date: 'April 12', type: 'Call', clinician: 'Carrie', initials: 'CA' }
+  },
+  {
+    id: 6,
+    name: 'Sylvia Park',
+    initials: 'SP',
+    age: 61,
+    procedure: 'Mastectomy',
+    day: 11,
+    silent: false,
+    silentHours: 0,
+    risk: 'medium',
+    lastSignalLabel: 'Tapped concern · 2h ago',
+    lastSignalType: 'concern',
+    calendar: ['ok','ok','ok','ok','ok','ok','concern'],
+    curaNote: 'Monitoring: reported concern today · incision site discomfort at Day 11',
+    aiMe: 'I\'m having some pain around the incision site — is this normal at Day 11? It\'s not severe but it feels different from yesterday.',
+    lastContact: { date: 'April 9', type: 'Video call', clinician: 'Dr. Greenhut', initials: 'DG' }
+  },
+  {
+    id: 7,
+    name: 'James Whitfield',
+    initials: 'JW',
+    age: 58,
+    procedure: 'Total knee replacement',
+    day: 8,
+    silent: false,
+    silentHours: 0,
+    risk: 'medium',
+    lastSignalLabel: 'Tapped okay · 4h ago',
+    lastSignalType: 'ok',
+    calendar: ['ok','ok','ok','ok','ok','ok','ok'],
+    curaNote: 'Stable · progressing within normal range · PT exercises on schedule',
+    aiMe: null,
+    lastContact: { date: 'April 8', type: 'Call', clinician: 'Carrie', initials: 'CA' }
+  },
+  {
+    id: 8,
+    name: 'Patricia Wells',
+    initials: 'PW',
+    age: 55,
+    procedure: 'Cholecystectomy',
+    day: 19,
+    silent: false,
+    silentHours: 0,
+    risk: 'low',
+    lastSignalLabel: 'Tapped okay · 2h ago',
+    lastSignalType: 'ok',
+    calendar: ['ok','ok','ok','ok','ok','ok','ok'],
+    curaNote: 'Recovery on track · approaching end of episode · strong engagement throughout',
+    aiMe: null,
+    lastContact: { date: 'April 4', type: 'Video call', clinician: 'Dr. Greenhut', initials: 'DG' }
+  }
+];
+
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+let selectedId  = null;
+let panelOpen   = false;
+
+/* ═══════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════ */
+const DAY_LABELS    = ['Wed','Thu','Fri','Sat','Sun','Mon','Today'];
+const SIGNAL_TIPS   = {
+  ok:      'Tapped okay',
+  concern: 'Tapped concern',
+  chat:    'AiME conversation',
+  silent:  'No response',
+  empty:   'Pre-enrollment'
+};
+const RISK_LABELS   = { high: 'High Risk', medium: 'Medium', low: 'Low' };
+
+/* ═══════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════ */
+function getRiskBadgeHTML(risk, size = 'sm') {
+  const sz = size === 'lg' ? ' badge-lg' : '';
+  return `<span class="risk-badge risk-${risk}${sz}" aria-label="${RISK_LABELS[risk]} risk">${RISK_LABELS[risk]}</span>`;
+}
+
+function getSilentBadgeHTML(hours) {
+  return `<span class="silent-badge" aria-label="Silent for ${hours} hours">Silent ${hours}h</span>`;
+}
+
+function getSignalHTML(p) {
+  if (p.silent) {
+    return `<span class="signal-indicator signal-none" aria-label="No signal recorded">—</span>`;
+  }
+  if (!p.lastSignalLabel) return '';
+  return `<span class="signal-indicator signal-${p.lastSignalType}" aria-label="${p.lastSignalLabel}">
+    <span class="signal-dot" aria-hidden="true"></span>${p.lastSignalLabel}
+  </span>`;
+}
+
+function getCalendarHTML(calendar) {
+  return `<div class="cal-squares">${
+    calendar.map((state, i) => `
+      <div class="cal-item">
+        <div class="calendar-square cal-${state}"
+             title="${DAY_LABELS[i]}: ${SIGNAL_TIPS[state]}"
+             aria-label="${DAY_LABELS[i]}: ${SIGNAL_TIPS[state]}"
+             role="img"></div>
+        <span class="cal-label">${DAY_LABELS[i]}</span>
+      </div>`).join('')
+  }</div>
+  <div class="calendar-legend">
+    <span class="legend-item"><span class="legend-dot cal-ok"></span>Okay</span>
+    <span class="legend-item"><span class="legend-dot cal-concern"></span>Concern</span>
+    <span class="legend-item"><span class="legend-dot cal-chat"></span>AiME chat</span>
+    <span class="legend-item"><span class="legend-dot cal-silent"></span>No response</span>
+    <span class="legend-item"><span class="legend-dot cal-empty"></span>Pre-enrollment</span>
+  </div>`;
+}
+
+function getClinicianInitials(name) {
+  return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+}
+
+/* ═══════════════════════════════════════════
+   RENDER ROWS
+═══════════════════════════════════════════ */
+function renderRows() {
+  const list = document.getElementById('patient-list');
+  list.innerHTML = patients.map((p, i) => `
+    <div class="patient-row${p.silent ? ' row-silent' : ''}"
+         data-id="${p.id}"
+         role="button"
+         tabindex="0"
+         aria-label="${p.name}, ${p.procedure}, Day ${p.day}, ${p.silent ? `silent ${p.silentHours} hours` : p.lastSignalLabel || ''}, Cura ${RISK_LABELS[p.risk]}"
+         style="animation-delay:${i * 45}ms">
+      <div class="patient-avatar" aria-hidden="true">${p.initials}</div>
+      <div class="patient-info">
+        <span class="patient-name">${p.name}</span>
+        <span class="patient-procedure">${p.procedure}</span>
+      </div>
+      <div class="patient-meta">
+        <span class="days-badge" title="Day ${p.day} post-discharge">Day ${p.day}</span>
+        ${getSignalHTML(p)}
+        ${getRiskBadgeHTML(p.risk, 'sm')}
+        ${p.silent ? getSilentBadgeHTML(p.silentHours) : ''}
+      </div>
+    </div>
+  `).join('');
+
+  // Wire row interactions
+  document.querySelectorAll('.patient-row').forEach(row => {
+    row.addEventListener('click', () => selectPatient(+row.dataset.id));
+    row.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectPatient(+row.dataset.id);
+      }
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════
+   RENDER PANEL CONTENT
+═══════════════════════════════════════════ */
+function renderPanel(p) {
+  // Header
+  document.getElementById('panel-name').textContent = p.name;
+  document.getElementById('panel-sub').textContent =
+    `${p.procedure} · Day ${p.day} · Age ${p.age}`;
+
+  // Body
+  let html = '';
+
+  // Silent banner (conditional)
+  if (p.silent) {
+    html += `
+      <div class="silent-banner" role="alert">
+        <div class="silent-banner-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 1L1 14h14L8 1z"/><path d="M8 6v4"/><circle cx="8" cy="12" r=".5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <div class="silent-banner-title">No response in ${p.silentHours} hours</div>
+          <div class="silent-banner-sub">Last signal: ${p.lastContact.date} via clinician call</div>
+        </div>
+      </div>`;
+  }
+
+  // 7-day calendar
+  html += `
+    <div class="panel-section">
+      <h2 class="section-title">7-Day Response</h2>
+      ${getCalendarHTML(p.calendar)}
+    </div>`;
+
+  // Cura risk score
+  html += `
+    <div class="panel-section">
+      <h2 class="section-title">Cura Risk Score</h2>
+      <div class="cura-content">
+        ${getRiskBadgeHTML(p.risk, 'lg')}
+        <p class="cura-note">${p.curaNote}</p>
+      </div>
+    </div>`;
+
+  // AiME conversation
+  html += `
+    <div class="panel-section">
+      <h2 class="section-title">Last AiME Conversation</h2>
+      ${p.aiMe
+        ? `<blockquote class="aime-quote">"${p.aiMe}"</blockquote>
+           <span class="aime-meta">Today · via AiME</span>`
+        : `<p class="aime-empty">No AiME conversations yet.</p>`}
+    </div>`;
+
+  // Last contact
+  html += `
+    <div class="panel-section">
+      <h2 class="section-title">Last Contact</h2>
+      <div class="contact-row">
+        <div class="clinician-avatar" aria-hidden="true">${p.lastContact.initials}</div>
+        <div class="contact-info">
+          <span class="contact-clinician">${p.lastContact.clinician}</span>
+          <span class="contact-meta">${p.lastContact.date} · ${p.lastContact.type}</span>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('panel-body').innerHTML = html;
+
+  // Scroll panel body to top when switching patients
+  document.getElementById('panel-body').scrollTop = 0;
+}
+
+/* ═══════════════════════════════════════════
+   STATE MUTATIONS
+═══════════════════════════════════════════ */
+function selectPatient(id) {
+  selectedId = id;
+
+  // Update row selection state
+  document.querySelectorAll('.patient-row').forEach(row => {
+    const isSelected = +row.dataset.id === id;
+    row.classList.toggle('row-selected', isSelected);
+    row.setAttribute('aria-selected', isSelected);
+  });
+
+  // Open panel
+  if (!panelOpen) {
+    panelOpen = true;
+    document.getElementById('detail-panel').classList.add('open');
+    document.getElementById('detail-panel').setAttribute('aria-hidden', 'false');
+    document.getElementById('queue-column').classList.add('panel-open');
+  }
+
+  // Fill panel content
+  const patient = patients.find(p => p.id === id);
+  renderPanel(patient);
+
+  // Reset Call Now button state
+  const btn = document.getElementById('btn-call');
+  btn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 2h3l1.5 3.5-1.8 1.1a9 9 0 004.7 4.7l1.1-1.8L14 11v3a1 1 0 01-1 1A12 12 0 011 3a1 1 0 011-1z"/>
+    </svg>Call Now`;
+  btn.classList.remove('btn-calling');
+  btn.disabled = false;
+}
+
+function closePanel() {
+  panelOpen  = false;
+  selectedId = null;
+
+  document.getElementById('detail-panel').classList.remove('open');
+  document.getElementById('detail-panel').setAttribute('aria-hidden', 'true');
+  document.getElementById('queue-column').classList.remove('panel-open');
+
+  document.querySelectorAll('.patient-row').forEach(row => {
+    row.classList.remove('row-selected');
+    row.removeAttribute('aria-selected');
+  });
+}
+
+/* ═══════════════════════════════════════════
+   CALL NOW INTERACTION
+═══════════════════════════════════════════ */
+function handleCallNow() {
+  const btn     = document.getElementById('btn-call');
+  const patient = patients.find(p => p.id === selectedId);
+  const first   = patient ? patient.name.split(' ')[0] : '';
+
+  btn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite">
+      <circle cx="7" cy="7" r="6" stroke-dasharray="12 26"/>
+    </svg>Calling ${first}…`;
+  btn.classList.add('btn-calling');
+  btn.disabled = true;
+
+  setTimeout(() => {
+    if (!document.getElementById('btn-call')) return;
+    document.getElementById('btn-call').innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 2h3l1.5 3.5-1.8 1.1a9 9 0 004.7 4.7l1.1-1.8L14 11v3a1 1 0 01-1 1A12 12 0 011 3a1 1 0 011-1z"/>
+      </svg>Call Now`;
+    document.getElementById('btn-call').classList.remove('btn-calling');
+    document.getElementById('btn-call').disabled = false;
+  }, 2000);
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  // Render all rows
+  renderRows();
+
+  // Wire close button
+  document.getElementById('close-panel').addEventListener('click', closePanel);
+
+  // Wire Call Now
+  document.getElementById('btn-call').addEventListener('click', handleCallNow);
+
+  // Wire Add Note (decorative — show brief feedback)
+  document.getElementById('btn-note').addEventListener('click', () => {
+    const btn = document.getElementById('btn-note');
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l3.5 3.5L12 3"/></svg>Noted`;
+    setTimeout(() => {
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5a1.414 1.414 0 012 2L4 11l-3 1 1-3 7.5-7.5z"/></svg>Add Note`;
+    }, 1800);
+  });
+
+  // Keyboard: Escape closes panel
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && panelOpen) closePanel();
+  });
+
+  // Default: pre-select Robert Stein on load
+  selectPatient(1);
+});
+</script>
+</body>
+</html>

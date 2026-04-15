@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProActive Loop — Dimer Health</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple:       #8054F1;
+      --purple-dark:  #4037A0;
+      --dark:         #1A193B;
+      --red:          #C0392B;
+      --amber:        #D97706;
+      --green:        #A1E974;
+      --lavender:     #F3F1FD;
+      --border:       #E5E3F0;
+      --text:         #1A193B;
+      --text-2:       #4A4763;
+      --text-3:       #9492A8;
+    }
+
+    html {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      background: #FAFAF9;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 40px 80px;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 40px;
+      padding-bottom: 28px;
+      border-bottom: 2px solid var(--dark);
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .logo-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #8B6AF6, #4037A0);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-text {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--dark);
+      letter-spacing: -0.02em;
+    }
+
+    .logo-sub {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-3);
+      margin-left: 2px;
+    }
+
+    .header-left h1 {
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--dark);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+    }
+
+    .header-left h1 span {
+      background: linear-gradient(135deg, #8054F1, #4037A0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-left .subtitle {
+      font-size: 15px;
+      color: var(--text-2);
+      margin-top: 8px;
+      line-height: 1.5;
+      max-width: 480px;
+    }
+
+    .header-meta {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .meta-line {
+      font-size: 12px;
+      color: var(--text-3);
+      line-height: 1.8;
+    }
+
+    .meta-line strong {
+      color: var(--text-2);
+      font-weight: 600;
+    }
+
+    /* ── HERO STATS ── */
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .stat-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+    }
+
+    .stat-card.alert {
+      background: #FEF2F2;
+      border-color: #FECACA;
+    }
+
+    .stat-number {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--dark);
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .stat-card.alert .stat-number { color: var(--red); }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-3);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .stat-source {
+      font-size: 10px;
+      color: var(--text-3);
+      margin-top: 8px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    /* ── TWO COLUMN ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    /* ── SECTION ── */
+    .section {
+      margin-bottom: 28px;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--purple);
+      margin-bottom: 10px;
+    }
+
+    .section h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--dark);
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .section p {
+      font-size: 13.5px;
+      color: var(--text-2);
+      line-height: 1.65;
+    }
+
+    /* ── INSIGHT BOX ── */
+    .insight-box {
+      background: var(--lavender);
+      border-left: 3px solid var(--purple);
+      border-radius: 0 10px 10px 0;
+      padding: 16px 18px;
+      margin-bottom: 28px;
+    }
+
+    .insight-box p {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--dark);
+      line-height: 1.6;
+    }
+
+    .insight-box em {
+      font-style: normal;
+      color: var(--purple);
+      font-weight: 600;
+    }
+
+    /* ── FEATURE CARDS ── */
+    .feature-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .feature-card.purple-card {
+      background: var(--dark);
+      border-color: var(--dark);
+    }
+
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--lavender);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .feature-card.purple-card .feature-icon {
+      background: rgba(255,255,255,.1);
+    }
+
+    .feature-card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--dark);
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+
+    .feature-card.purple-card h3 { color: white; }
+
+    .feature-card p {
+      font-size: 12.5px;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+
+    .feature-card.purple-card p { color: rgba(255,255,255,.65); }
+
+    /* ── LOOP DIAGRAM ── */
+    .loop-diagram {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px 24px;
+      margin-bottom: 28px;
+    }
+
+    .loop-steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+      row-gap: 10px;
+    }
+
+    .loop-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .step-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--lavender);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--purple);
+      flex-shrink: 0;
+    }
+
+    .step-text {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-2);
+      white-space: nowrap;
+    }
+
+    .step-arrow {
+      width: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ── METRICS TABLE ── */
+    .metrics-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 28px;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .metrics-table th {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--text-3);
+      background: #FAFAFE;
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .metrics-table td {
+      padding: 11px 16px;
+      font-size: 12.5px;
+      color: var(--text-2);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .metrics-table tr:last-child td { border-bottom: none; }
+
+    .metrics-table td:first-child {
+      font-weight: 600;
+      color: var(--dark);
+      width: 45%;
+    }
+
+    .target-val {
+      font-weight: 700;
+      color: var(--purple);
+    }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      letter-spacing: .03em;
+    }
+
+    .badge-red    { background: #FEF2F2; color: var(--red); }
+    .badge-purple { background: var(--lavender); color: var(--purple); }
+    .badge-green  { background: #F0FDF4; color: #2D6A4F; }
+    .badge-amber  { background: #FFFBEB; color: var(--amber); }
+
+    /* ── QUOTE ── */
+    .quote-block {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      margin-bottom: 28px;
+    }
+
+    .quote-text {
+      font-size: 14px;
+      font-style: italic;
+      color: var(--text-2);
+      line-height: 1.65;
+      margin-bottom: 10px;
+    }
+
+    .quote-attr {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      padding-top: 28px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-left {
+      font-size: 12px;
+      color: var(--text-3);
+      line-height: 1.6;
+    }
+
+    .footer-left strong {
+      color: var(--text-2);
+      font-weight: 600;
+    }
+
+    .demo-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--dark);
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: 8px;
+      text-decoration: none;
+      letter-spacing: .01em;
+      transition: background .15s;
+    }
+
+    .demo-link:hover { background: #2D2B50; }
+
+    /* ── PRINT ── */
+    @media print {
+      body { padding: 24px 32px; background: white; font-size: 13px; }
+      .demo-link { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-row">
+        <div class="logo-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <polyline points="1,9 4,9 6.5,3 9,15 11.5,6 14,9 17,9"
+                      stroke="white" stroke-width="1.8"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="logo-text">dimer<span class="logo-sub"> health</span></span>
+      </div>
+      <h1>ProActive <span>Loop</span></h1>
+      <p class="subtitle">A closed-loop signal system that makes Dimer's post-discharge model proactive end-to-end — for patients and Transitionists alike.</p>
+    </div>
+    <div class="header-meta">
+      <div class="meta-line"><strong>Author</strong> Ben Sahar</div>
+      <div class="meta-line"><strong>Date</strong> April 15, 2026</div>
+      <div class="meta-line"><strong>Status</strong> Pitch · Draft</div>
+      <div class="meta-line"><strong>Audience</strong> VP Product, Dimer Health</div>
+    </div>
+  </header>
+
+  <!-- HERO STATS -->
+  <div class="hero-stats">
+    <div class="stat-card alert">
+      <div class="stat-number">10%</div>
+      <div class="stat-label">of patients use the digital layer.<br>5,883 episodes. 500 AiME chats.</div>
+      <div class="stat-source">Dimer internal · Apr 2026</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">29 days</div>
+      <div class="stat-label">Average wait for first follow-up appointment after discharge</div>
+      <div class="stat-source">Industry average</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">$15K</div>
+      <div class="stat-label">Average cost of a preventable readmission — the metric clients pay to reduce</div>
+      <div class="stat-source">US Healthcare · CMS data</div>
+    </div>
+  </div>
+
+  <!-- THE INSIGHT -->
+  <div class="insight-box">
+    <p>Dimer's clinical model is already proactive — admins call within 12 hours, Transitionists follow up within 24.
+    But between those calls, <em>Dimer is blind</em>. If a patient doesn't open the app, there is zero digital signal
+    about how they're doing. The only reason 90% of patients never use AiME: it waits for them to show up first.</p>
+  </div>
+
+  <!-- THE GAP + THE FIX -->
+  <div class="two-col section">
+    <div>
+      <div class="section-label">The Problem</div>
+      <h2>A proactive clinical model on a reactive digital foundation</h2>
+      <p>AiME is a powerful tool — but it's fully reactive. Patients must download the app, remember to open it, and think of a question. Patients most at risk of readmission (elderly, post-surgical, living alone) are the least likely to clear all three hurdles. Meanwhile, Cura already assigns risk scores to every patient — but Transitionists have no prioritized work queue to act on that intelligence. The signal exists. It just never surfaces.</p>
+    </div>
+    <div>
+      <div class="section-label">The Solution</div>
+      <h2>Two surfaces. One closed loop.</h2>
+      <p>ProActive Loop pairs a frictionless daily patient check-in with a Cura-powered Transitionist dashboard. Instead of waiting for patients to open the app, AiME initiates a daily push notification — one tap to confirm "I'm okay." On the clinician side, silence and risk score combine into a prioritized queue: one screen that answers <em>"who do I call first this morning?"</em> in under 30 seconds.</p>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="loop-diagram">
+    <div class="section-label" style="margin-bottom:14px">How the loop works</div>
+    <div class="loop-steps">
+      <div class="loop-step">
+        <div class="step-dot">1</div>
+        <span class="step-text">Patient receives daily push</span>
+      </div>
+      <div class="step-arrow">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+      </div>
+      <div class="loop-step">
+        <div class="step-dot">2</div>
+        <span class="step-text">Taps "I'm okay" or "Concern"</span>
+      </div>
+      <div class="step-arrow">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+      </div>
+      <div class="loop-step">
+        <div class="step-dot">3</div>
+        <span class="step-text">Signal logged · Cura re-scores</span>
+      </div>
+      <div class="step-arrow">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+      </div>
+      <div class="loop-step">
+        <div class="step-dot">4</div>
+        <span class="step-text">Dashboard re-ranks queue</span>
+      </div>
+      <div class="step-arrow">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+      </div>
+      <div class="loop-step">
+        <div class="step-dot">5</div>
+        <span class="step-text">Transitionist calls the right patient first</span>
+      </div>
+      <div class="step-arrow">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+      </div>
+      <div class="loop-step">
+        <div class="step-dot">✓</div>
+        <span class="step-text">Earlier intervention · fewer readmissions</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TWO FEATURES -->
+  <div class="section-label">The two surfaces</div>
+  <div class="two-col" style="margin-bottom:28px">
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#8054F1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="1" width="10" height="16" rx="2"/>
+          <path d="M7 14h4"/>
+        </svg>
+      </div>
+      <h3>Patient: Daily Check-In</h3>
+      <p>A personalized push notification between 8–10am — not a generic reminder. It references the patient's recovery day and procedure. One tap to respond. No app-opening required. Silence after 48 hours automatically elevates the patient's risk priority in the dashboard. Designed for the 72-year-old living alone, not the 30-year-old who uses ten apps a day.</p>
+    </div>
+    <div class="feature-card purple-card">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="1" width="16" height="16" rx="2"/>
+          <path d="M1 6h16M6 6v10"/>
+        </svg>
+      </div>
+      <h3>Transitionist: Priority Dashboard</h3>
+      <p>A Cura-powered work queue that answers one question every morning: who do I call first? Patients ranked by composite risk score + silence duration. Silent patients pinned to the top. Click any row to see 7 days of signal history, last AiME conversation, and Cura risk context — without leaving the queue. One screen. Under 30 seconds.</p>
+    </div>
+  </div>
+
+  <!-- PATIENT VOICE -->
+  <div class="quote-block">
+    <p class="quote-text">"I'm a 72-year-old male that lives alone. Dimer Health has been a real asset in helping me recover. They followed up with me every day no matter what time."</p>
+    <span class="quote-attr">Actual patient review — Google · 2026 · This patient never mentioned the app. No review does.</span>
+  </div>
+
+  <!-- METRICS -->
+  <div class="section-label">Success metrics</div>
+  <table class="metrics-table">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Current</th>
+        <th>Target</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Patients generating ≥1 digital signal per week</td>
+        <td>~10% <span class="badge badge-red">No proactive push</span></td>
+        <td class="target-val">≥60%</td>
+      </tr>
+      <tr>
+        <td>Transitionist first call = highest Cura-risk patient</td>
+        <td>Unknown <span class="badge badge-amber">No queue exists</span></td>
+        <td class="target-val">≥80% compliance</td>
+      </tr>
+      <tr>
+        <td>Patient tap response rate (D1–D7)</td>
+        <td>0% <span class="badge badge-red">Feature doesn't exist</span></td>
+        <td class="target-val">≥50%</td>
+      </tr>
+      <tr>
+        <td>30-day readmission reduction (incremental)</td>
+        <td>45% baseline reduction (existing)</td>
+        <td class="target-val">Further 10% improvement</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- WHY NOW -->
+  <div class="three-col">
+    <div class="feature-card">
+      <div class="section-label">Why now</div>
+      <h3>Series A momentum</h3>
+      <p>Dimer's Series A announcement explicitly set the direction: <em>"interactive, dynamic, responsive, personalized, connected, always available, and in real time."</em> ProActive Loop is the most direct expression of that vision achievable in the next 6 months.</p>
+    </div>
+    <div class="feature-card">
+      <div class="section-label">Why this</div>
+      <h3>Builds on what exists</h3>
+      <p>No new AI model required. Cura already scores patients — this feature routes that score into a UI. AiME already handles escalation — this feature adds the trigger layer. The infrastructure exists. The surface doesn't.</p>
+    </div>
+    <div class="feature-card">
+      <div class="section-label">Why it scales</div>
+      <h3>Headcount-independent growth</h3>
+      <p>Transitionists work smarter, not more. More patient signals without more calls. Earlier detection without more staff. Every additional tap is a data point that could prevent a $15,000 readmission — and costs Dimer nothing to collect.</p>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-left">
+      <strong>Ben Sahar</strong> · PM with healthcare experience (Maccabi Health)<br>
+      Prepared for VP Product review · April 15, 2026
+    </div>
+    <a class="demo-link" href="/index.html">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="1" width="12" height="12" rx="2"/>
+        <path d="M1 5h12M5 5v7"/>
+      </svg>
+      View Live Prototype →
+    </a>
+  </footer>
+
+</body>
+</html>

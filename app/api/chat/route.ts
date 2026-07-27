@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { searchChunksTraced } from "@/lib/retrieval";
+import {
+  checkAndCount,
+  clientIp,
+  MAX_QUESTION_CHARS,
+  PER_IP_DAILY_LIMIT,
+} from "@/lib/ratelimit";
 import fs from "fs";
 import path from "path";
 
@@ -31,17 +37,83 @@ const SYSTEM_PROMPT =  `אתה עוזר של הפודקאסט "איך פותרי
 const TRACES_PATH = path.resolve(process.cwd(), "traces.jsonl");
 
 function appendTrace(trace: Record<string, unknown>) {
-  fs.appendFileSync(TRACES_PATH, JSON.stringify(trace) + "\n", "utf-8");
+  // Serverless filesystems are read-only outside /tmp, so tracing is a
+  // local-dev convenience only. Never let it fail the request.
+  try {
+    fs.appendFileSync(TRACES_PATH, JSON.stringify(trace) + "\n", "utf-8");
+  } catch (error) {
+    console.warn("trace write skipped:", (error as Error).message);
+  }
+}
+
+// Origins allowed to call this API from a browser. Comma-separated env var,
+// e.g. "https://podcast.example.com,https://www.podcast.example.com".
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  // Same-origin requests send no Origin header and need no CORS headers.
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
+}
+
+/** CORS preflight. */
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  const headers = corsHeaders(origin);
+  if (Object.keys(headers).length === 0) {
+    return new NextResponse(null, { status: 403 });
+  }
+  return new NextResponse(null, { status: 204, headers });
 }
 
 export async function POST(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  const cors = corsHeaders(origin);
+
+  // A cross-origin caller we don't recognise never reaches the LLM —
+  // this endpoint spends money on every request.
+  if (origin && Object.keys(cors).length === 0) {
+    return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
+  }
+
   try {
     const { question } = await request.json();
 
     if (!question || typeof question !== "string") {
       return NextResponse.json(
         { error: "Missing question field" },
-        { status: 400 }
+        { status: 400, headers: cors }
+      );
+    }
+
+    // A very long question inflates input tokens for no benefit.
+    if (question.length > MAX_QUESTION_CHARS) {
+      return NextResponse.json(
+        { error: `השאלה ארוכה מדי (עד ${MAX_QUESTION_CHARS} תווים).` },
+        { status: 400, headers: cors }
+      );
+    }
+
+    // Daily caps — checked before any paid call.
+    const limit = await checkAndCount(clientIp(request.headers));
+    if (!limit.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            limit.scope === "ip"
+              ? `הגעת למכסת השאלות היומית (${PER_IP_DAILY_LIMIT} שאלות). נסו שוב מחר.`
+              : "השירות הגיע למכסת השאלות היומית. נסו שוב מחר.",
+        },
+        { status: 429, headers: cors }
       );
     }
 
@@ -217,12 +289,12 @@ export async function POST(request: NextRequest) {
       ],
     });
 
-    return NextResponse.json({ answer, sources });
+    return NextResponse.json({ answer, sources }, { headers: cors });
   } catch (error) {
     console.error("Chat API error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500, headers: cors }
     );
   }
 }

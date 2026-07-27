@@ -8,6 +8,11 @@ interface Message {
   sources?: string[];
 }
 
+// Empty in this app (same-origin /api/chat). On the podcast site, set
+// NEXT_PUBLIC_CHAT_API_URL to the deployed RAG app, e.g.
+// https://ragpodcastchatbot.vercel.app
+const API_BASE = process.env.NEXT_PUBLIC_CHAT_API_URL ?? "";
+
 export default function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -28,7 +33,7 @@ export default function ChatWidget() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
@@ -42,9 +47,14 @@ export default function ChatWidget() {
           { role: "assistant", content: data.answer, sources: data.sources },
         ]);
       } else {
+        // 400/429 carry a user-facing Hebrew reason (too long, daily cap).
+        const reason =
+          res.status === 429 || res.status === 400
+            ? data.error
+            : "שגיאה: לא הצלחתי לעבד את השאלה.";
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "שגיאה: לא הצלחתי לעבד את השאלה." },
+          { role: "assistant", content: reason },
         ]);
       }
     } catch {
@@ -175,6 +185,7 @@ export default function ChatWidget() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="שאלו שאלה..."
           disabled={loading}
+          maxLength={400}
           style={{
             flex: 1,
             padding: "10px 14px",

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>Log Viewer — איך פותרים את זה?</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #1a1a2e; padding: 24px; line-height: 1.6; }
+
+.drop-zone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 48px 24px; text-align: center; color: #64748b; margin-bottom: 24px; transition: border-color .2s; }
+.drop-zone.over { border-color: #3b82f6; background: #eff6ff; }
+.drop-zone input { display: none; }
+.drop-zone label { cursor: pointer; text-decoration: underline; color: #3b82f6; }
+
+.summary-bar { display: flex; gap: 16px; flex-wrap: wrap; background: #1a1a2e; color: white; padding: 16px 20px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; }
+.summary-bar .stat { display: flex; flex-direction: column; align-items: center; min-width: 100px; }
+.summary-bar .stat .val { font-size: 26px; font-weight: 700; }
+.summary-bar .stat .lbl { font-size: 12px; opacity: .7; }
+
+.filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+.filters input, .filters select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; direction: rtl; }
+.filters input { flex: 1; min-width: 200px; }
+.filters select { min-width: 130px; }
+
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; margin-bottom: 14px; }
+.card .question { font-size: 18px; font-weight: 600; margin-bottom: 10px; }
+.card .answer { background: #f9fafb; border-radius: 8px; padding: 12px; margin-bottom: 12px; white-space: pre-wrap; font-size: 14px; border: 1px solid #f0f0f0; }
+.card .meta-row { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #6b7280; margin-bottom: 6px; }
+
+.badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; color: white; }
+.badge.correct { background: #22c55e; }
+.badge.partial { background: #eab308; color: #1a1a2e; }
+.badge.wrong { background: #ef4444; }
+.badge.hallucinated { background: #7c3aed; }
+
+.episodes-list { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ep-tag { background: #e0e7ff; color: #3730a3; padding: 3px 10px; border-radius: 6px; font-size: 12px; }
+
+.latency { display: flex; gap: 14px; font-size: 12px; color: #9ca3af; }
+.latency span { font-variant-numeric: tabular-nums; }
+
+.ts { font-size: 11px; color: #b0b0b0; float: left; direction: ltr; }
+
+#no-data { text-align: center; color: #94a3b8; padding: 60px 0; font-size: 16px; }
+
+/* --- Step chain (n8n-style execution log) --- */
+.steps { margin-top: 14px; border-top: 1px solid #f0f0f0; padding-top: 12px; }
+.step { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; background: #fff; overflow: hidden; }
+.step > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 14px; user-select: none; }
+.step > summary::-webkit-details-marker { display: none; }
+.step > summary:hover { background: #f9fafb; }
+.step[open] > summary { background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+.step .chev { color: #9ca3af; font-size: 11px; transition: transform .15s; }
+.step[open] .chev { transform: rotate(90deg); }
+.step .idx { width: 22px; height: 22px; border-radius: 50%; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+.step .name { font-weight: 600; flex: 1; }
+.step .lat { font-size: 12px; color: #6b7280; font-variant-numeric: tabular-nums; direction: ltr; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot.ok { background: #22c55e; }
+.dot.passthrough { background: #cbd5e1; }
+.dot.error { background: #ef4444; }
+
+.io { padding: 12px 14px; }
+.io h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; margin: 10px 0 6px; }
+.io h4:first-child { margin-top: 0; }
+.step .note { font-size: 13px; color: #6b7280; background: #f8fafc; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; }
+pre.blob { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; overflow: auto; max-height: 380px; white-space: pre-wrap; word-break: break-word; direction: ltr; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+pre.blob.rtl { direction: rtl; text-align: right; }
+.copy-btn { float: left; background: #e2e8f0; border: none; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; color: #334155; }
+.copy-btn:hover { background: #cbd5e1; }
+
+table.cands { width: 100%; border-collapse: collapse; font-size: 12px; direction: rtl; }
+table.cands th { text-align: right; color: #6b7280; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; background: #fff; }
+table.cands td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+table.cands tr.sel { background: #f0fdf4; }
+table.cands tr.sel td:first-child { box-shadow: inset -3px 0 0 #22c55e; }
+.cands-wrap { max-height: 340px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+.score { font-variant-numeric: tabular-nums; direction: ltr; display: inline-block; }
+.bar { display: inline-block; height: 6px; background: #c7d2fe; border-radius: 3px; vertical-align: middle; margin-inline-start: 6px; }
+.prev { color: #6b7280; }
+
+details.chunk { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; }
+details.chunk > summary { cursor: pointer; padding: 8px 12px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+details.chunk > summary:hover { background: #f9fafb; }
+details.chunk .body { padding: 10px 12px; border-top: 1px solid #e5e7eb; white-space: pre-wrap; font-size: 13px; max-height: 320px; overflow: auto; }
+.legacy { font-size: 12px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 10px; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<h1 style="margin-bottom: 16px; font-size: 22px;">Log Viewer — פודקאסט "איך פותרים את זה?"</h1>
+
+<div class="drop-zone" id="dropZone">טוען נתונים…</div>
+
+<div id="app" style="display:none">
+  <div class="summary-bar" id="summaryBar"></div>
+  <div class="filters">
+    <input type="text" id="searchInput" placeholder="חיפוש חופשי בשאלה...">
+    <select id="verdictFilter"><option value="">כל הסטטוסים</option><option value="correct">correct</option><option value="partial">partial</option><option value="wrong">wrong</option><option value="hallucinated">hallucinated</option><option value="none">ללא verdict</option></select>
+    <select id="episodeFilter"><option value="">כל הפרקים</option></select>
+  </div>
+  <div id="cards"></div>
+  <div id="no-data" style="display:none">אין תוצאות מתאימות לסינון.</div>
+</div>
+
+<script>
+let traces = [];
+let evalVerdicts = {};  // question -> verdict obj
+let evalSummary = null; // latest eval result top-level
+
+const dropZone = document.getElementById('dropZone');
+
+// Poll the server so new queries show up without a manual refresh.
+const POLL_MS = 3000;
+let lastSig = null;
+
+// Which step/chunk panels the user has expanded, so a repaint doesn't close them.
+const openKeys = new Set();
+document.addEventListener('toggle', e => {
+  const key = e.target.dataset?.key;
+  if (!key) return;
+  if (e.target.open) openKeys.add(key); else openKeys.delete(key);
+}, true);
+
+async function load() {
+  let data;
+  try {
+    const res = await fetch('/api/traces', { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    data = await res.json();
+  } catch (e) {
+    dropZone.textContent = 'שגיאה בטעינת הנתונים מהשרת — ודאו ש-npm run dev פועל.';
+    return;
+  }
+
+  const sig = JSON.stringify(data).length + ':' + (data.traces || []).length;
+  const unchanged = sig === lastSig;
+  lastSig = sig;
+  if (unchanged) return;  // don't repaint (and fight the user's open panels) for nothing
+
+  traces = (data.traces || []).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+  evalVerdicts = {};
+  evalSummary = null;
+  if (data.eval && Array.isArray(data.eval.verdicts)) {
+    evalSummary = data.eval;
+    for (const v of data.eval.verdicts) evalVerdicts[v.question] = v;
+  }
+
+  if (traces.length === 0 && !evalSummary) {
+    dropZone.textContent = 'אין עדיין שאילתות. שאלו משהו בצ׳אט והנתונים יופיעו כאן אוטומטית.';
+    dropZone.style.display = 'block';
+    document.getElementById('app').style.display = 'none';
+    return;
+  }
+
+  dropZone.style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  populateEpisodeFilter();
+  render();
+}
+
+load();
+setInterval(load, POLL_MS);
+
+function populateEpisodeFilter() {
+  const eps = new Set();
+  for (const t of traces) {
+    if (t.retrieved_chunks) {
+      for (const c of t.retrieved_chunks) eps.add(c.episode_id);
+    }
+  }
+  const sel = document.getElementById('episodeFilter');
+  const current = sel.value;
+  // Rebuild on each poll so newly-seen episodes appear, keeping the selection.
+  sel.innerHTML = '<option value="">כל הפרקים</option>';
+  for (const ep of [...eps].sort()) {
+    const o = document.createElement('option');
+    o.value = ep; o.textContent = ep;
+    sel.appendChild(o);
+  }
+  sel.value = current;
+}
+
+document.getElementById('searchInput').addEventListener('input', render);
+document.getElementById('verdictFilter').addEventListener('change', render);
+document.getElementById('episodeFilter').addEventListener('change', render);
+
+function render() {
+  const search = document.getElementById('searchInput').value.trim().toLowerCase();
+  const verdictF = document.getElementById('verdictFilter').value;
+  const episodeF = document.getElementById('episodeFilter').value;
+
+  let filtered = traces.filter(t => {
+    if (search && !(t.question || '').toLowerCase().includes(search)) return false;
+    if (episodeF && t.retrieved_chunks && !t.retrieved_chunks.some(c => c.episode_id === episodeF)) return false;
+
+    const v = evalVerdicts[t.question];
+    if (verdictF === 'none' && v) return false;
+    if (verdictF && verdictF !== 'none' && (!v || v.verdict !== verdictF)) return false;
+
+    return true;
+  });
+
+  // Summary bar
+  const totalTraces = traces.length;
+  const avgLatency = totalTraces > 0
+    ? Math.round(traces.reduce((s, t) => s + (t.latency_ms?.total || 0), 0) / totalTraces)
+    : 0;
+  const accuracy = evalSummary
+    ? Math.round((evalSummary.accuracy.correct / evalSummary.total_questions) * 100)
+    : null;
+  const recallPct = evalSummary ? Math.round(evalSummary.recall_at_k * 100) : null;
+
+  document.getElementById('summaryBar').innerHTML = `
+    <div class="stat"><span class="val">${totalTraces}</span><span class="lbl">שאילתות</span></div>
+    ${accuracy !== null ? `<div class="stat"><span class="val">${accuracy}%</span><span class="lbl">דיוק (eval)</span></div>` : ''}
+    ${recallPct !== null ? `<div class="stat"><span class="val">${recallPct}%</span><span class="lbl">recall@k</span></div>` : ''}
+    <div class="stat"><span class="val">${avgLatency}</span><span class="lbl">latency ממוצע (ms)</span></div>
+    <div class="stat"><span class="val">${filtered.length}</span><span class="lbl">מוצגות</span></div>
+  `;
+
+  // Cards
+  const container = document.getElementById('cards');
+  const noData = document.getElementById('no-data');
+
+  if (filtered.length === 0) {
+    container.innerHTML = '';
+    noData.style.display = 'block';
+    return;
+  }
+  noData.style.display = 'none';
+
+  container.innerHTML = filtered.map(t => {
+    const v = evalVerdicts[t.question];
+    const chunks = (t.retrieved_chunks || []).slice().sort((a, b) => b.score - a.score);
+    const lat = t.latency_ms || {};
+    const traceKey = `${t.timestamp || ''}|${t.question || ''}`;
+
+    return `<div class="card">
+      <span class="ts">${t.timestamp || ''}</span>
+      ${v ? `<span class="badge ${v.verdict}">${v.verdict}</span>` : ''}
+      <div class="question">${esc(t.question)}</div>
+      <div class="answer">${esc(t.answer)}</div>
+      <div class="episodes-list">
+        ${chunks.map(c => `<span class="ep-tag">${esc(c.episode_title || c.episode_id)} (${fmtScore(c.score)})</span>`).join('')}
+      </div>
+      ${v ? `<div class="meta-row">שיפוט: ${esc(v.judge_reasoning || '')}</div>` : ''}
+      <div class="latency">
+        ${lat.retrieval != null ? `<span>retrieval: ${lat.retrieval}ms</span>` : ''}
+        ${lat.generation != null ? `<span>generation: ${lat.generation}ms</span>` : ''}
+        ${lat.total != null ? `<span>total: ${lat.total}ms</span>` : ''}
+      </div>
+      ${renderSteps(t, traceKey)}
+    </div>`;
+  }).join('');
+}
+
+// --- Step chain ---------------------------------------------------------
+
+function renderSteps(t, traceKey) {
+  if (!Array.isArray(t.steps) || t.steps.length === 0) {
+    return `<div class="legacy">טרייס ישן — ללא פירוט שלבים. שאילתות חדשות יציגו את שרשרת השלבים המלאה.</div>`;
+  }
+  return `<div class="steps">${t.steps.map((s, i) => {
+    const key = `${traceKey}|step${i}`;
+    const status = s.status || 'ok';
+    return `<details class="step" data-key="${esc(key)}" ${openKeys.has(key) ? 'open' : ''}>
+      <summary>
+        <span class="chev">▶</span>
+        <span class="idx">${i + 1}</span>
+        <span class="dot ${esc(status)}" title="${esc(status)}"></span>
+        <span class="name">${esc(s.name)}</span>
+        <span class="lat">${s.latency_ms != null ? s.latency_ms + 'ms' : ''}</span>
+      </summary>
+      <div class="io">
+        ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+        <h4>Input</h4>${renderIO(s.input, key + '|in')}
+        <h4>Output</h4>${renderIO(s.output, key + '|out')}
+      </div>
+    </details>`;
+  }).join('')}</div>`;
+}
+
+// Renders a step's input/output, with purpose-built views for the payloads
+// that are unreadable as raw JSON (candidate list, chunk texts, final prompt).
+function renderIO(io, key) {
+  if (io == null) return `<div class="prev">—</div>`;
+  if (typeof io === 'string') return blob(io);
+
+  let html = '';
+  const rest = {};
+
+  for (const [k, val] of Object.entries(io)) {
+    if (k === 'candidates' && Array.isArray(val)) {
+      html += renderCandidates(val);
+    } else if (k === 'selected' && Array.isArray(val)) {
+      html += renderSelected(val, key);
+    } else if (k === 'exact_prompt_sent' && typeof val === 'string') {
+      html += `<div style="margin-bottom:8px">${blob(val, true)}</div>`;
+    } else {
+      rest[k] = val;
+    }
+  }
+  if (Object.keys(rest).length) html += blob(JSON.stringify(rest, null, 2));
+  return html;
+}
+
+function renderCandidates(cands) {
+  const max = Math.max(...cands.map(c => c.score || 0), 0.0001);
+  const rows = cands.map(c => `
+    <tr class="${c.selected ? 'sel' : ''}">
+      <td>${c.rank}</td>
+      <td>${esc(c.episode_title || c.episode_id)}<br><span class="prev">${esc(c.episode_id)} · chunk ${c.chunk_index}</span></td>
+      <td><span class="score">${fmtScore(c.score)}</span><span class="bar" style="width:${Math.round((c.score / max) * 60)}px"></span></td>
+      <td class="prev">${esc(c.preview)}</td>
+    </tr>`).join('');
+  const selCount = cands.filter(c => c.selected).length;
+  return `<div class="prev" style="margin-bottom:6px">${cands.length} מועמדים דורגו — ${selCount} נבחרו (מסומנים בירוק)</div>
+    <div class="cands-wrap"><table class="cands">
+      <thead><tr><th>#</th><th>פרק</th><th>score</th><th>תצוגה מקדימה</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function renderSelected(sel, key) {
+  return sel.map((c, i) => {
+    const k = `${key}|chunk${i}`;
+    return `<details class="chunk" data-key="${esc(k)}" ${openKeys.has(k) ? 'open' : ''}>
+      <summary>
+        <span class="chev">▶</span>
+        <strong>#${c.rank} ${esc(c.episode_title || c.episode_id)}</strong>
+        <span class="prev">${esc(c.episode_id)} · chunk ${c.chunk_index}</span>
+        <span class="score" style="margin-inline-start:auto">${fmtScore(c.score)}</span>
+      </summary>
+      <div class="body">${esc(c.chunk_text)}</div>
+    </details>`;
+  }).join('');
+}
+
+function blob(text, rtl) {
+  return `<div><button class="copy-btn" onclick="copyBlob(this)">העתק</button>
+    <pre class="blob ${rtl ? 'rtl' : ''}">${esc(text)}</pre></div>`;
+}
+
+function copyBlob(btn) {
+  const pre = btn.parentElement.querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    btn.textContent = 'הועתק ✓';
+    setTimeout(() => { btn.textContent = 'העתק'; }, 1500);
+  });
+}
+
+function fmtScore(s) { return typeof s === 'number' ? s.toFixed(3) : '—'; }
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+</script>
+</body>
+</html>

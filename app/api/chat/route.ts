@@ -60,9 +60,16 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
   .map((o) => o.trim())
   .filter(Boolean);
 
+// Browsers send Origin on POST even same-origin, so in dev the local page
+// would otherwise be rejected as a cross-origin caller. Never true in prod.
+const isLocalDevOrigin = (origin: string) =>
+  process.env.NODE_ENV !== "production" &&
+  /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+
 function corsHeaders(origin: string | null): Record<string, string> {
   // Same-origin requests send no Origin header and need no CORS headers.
-  if (!origin || !ALLOWED_ORIGINS.includes(origin)) return {};
+  if (!origin) return {};
+  if (!ALLOWED_ORIGINS.includes(origin) && !isLocalDevOrigin(origin)) return {};
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -127,7 +134,7 @@ export async function POST(request: NextRequest) {
     const t0 = Date.now();
 
     // Retrieve top 4 chunks (not 6 — saves ~30% input tokens)
-    const TOP_K = 4;
+    const TOP_K = 2;
     const search = await searchChunksTraced(question, TOP_K);
     const results = search.results;
     const tRetrieval = Date.now();
@@ -299,8 +306,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ answer, sources }, { headers: cors });
   } catch (error) {
     console.error("Chat API error:", error);
+    // TEMPORARY: surface the cause so a failing deployment can be diagnosed
+    // without runtime-log access. Remove once the endpoint is stable.
+    const err = error as Error;
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        detail: err?.message ?? String(error),
+        stack: err?.stack?.split("\n").slice(0, 6).join(" | "),
+      },
       { status: 500, headers: cors }
     );
   }

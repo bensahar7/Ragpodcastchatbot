@@ -33,9 +33,14 @@ function loadChunks(): EmbeddedChunk[] {
 
 async function getExtractor() {
   if (!extractorPromise) {
-    extractorPromise = import("@xenova/transformers").then(({ pipeline }) =>
-      pipeline("feature-extraction", "Xenova/multilingual-e5-small")
-    );
+    extractorPromise = import("@xenova/transformers").then(({ pipeline, env }) => {
+      // Serverless filesystems are read-only apart from /tmp, so the default
+      // node_modules/.cache download location fails at request time.
+      env.cacheDir = "/tmp/transformers-cache";
+      env.allowLocalModels = false;
+      env.useBrowserCache = false;
+      return pipeline("feature-extraction", "Xenova/multilingual-e5-small");
+    });
   }
   return extractorPromise;
 }
@@ -73,7 +78,7 @@ export interface TracedSearch {
  */
 export async function searchChunksTraced(
   query: string,
-  topK = 6
+  topK = 2
 ): Promise<TracedSearch> {
   const extractor = await getExtractor();
   // multilingual-e5 expects "query: " prefix for queries
@@ -120,7 +125,7 @@ export async function searchChunksTraced(
 
 export async function searchChunks(
   query: string,
-  topK = 6
+  topK = 2
 ): Promise<SearchResult[]> {
   const { results } = await searchChunksTraced(query, topK);
   return results;

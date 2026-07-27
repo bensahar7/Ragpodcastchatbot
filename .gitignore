@@ -33,8 +33,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# generated data (embeddings)
-/data/
+# generated data — contents, not the directory itself, so the negation below
+# works (git never descends into a fully excluded directory).
+/data/*
+# ...except the search index, which retrieval.ts reads at runtime. Without it
+# in the repo the deployed API has no chunks to search and every request 500s.
+!/data/embeddings.json
 
 # traces and eval results
 traces.jsonl

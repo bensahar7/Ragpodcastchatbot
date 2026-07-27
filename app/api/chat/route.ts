@@ -10,7 +10,14 @@ import {
 import fs from "fs";
 import path from "path";
 
-const openai = new OpenAI();
+// Constructed on first request, not at module load. Next imports every route
+// while collecting page data at build time, and a client built there would
+// fail the whole build when OPENAI_API_KEY is absent from the build env.
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openaiClient) openaiClient = new OpenAI();
+  return openaiClient;
+}
 
 // Keep system prompt minimal — every token costs money
 const SYSTEM_PROMPT =  `אתה עוזר של הפודקאסט "איך פותרים את זה?" — טכנולוגיה סביבתית.
@@ -149,7 +156,7 @@ export async function POST(request: NextRequest) {
     };
 
     const tGenStart = Date.now();
-    const response = await openai.chat.completions.create(requestBody);
+    const response = await getOpenAI().chat.completions.create(requestBody);
     const tGenEnd = Date.now();
 
     const rawAnswer = response.choices[0]?.message?.content ?? null;

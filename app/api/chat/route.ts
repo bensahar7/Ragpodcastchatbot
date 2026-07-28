@@ -306,15 +306,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ answer, sources }, { headers: cors });
   } catch (error) {
     console.error("Chat API error:", error);
-    // TEMPORARY: surface the cause so a failing deployment can be diagnosed
-    // without runtime-log access. Remove once the endpoint is stable.
-    const err = error as Error;
     return NextResponse.json(
-      {
-        error: "Internal server error",
-        detail: err?.message ?? String(error),
-        stack: err?.stack?.split("\n").slice(0, 6).join(" | "),
-      },
+      { error: "Internal server error" },
       { status: 500, headers: cors }
     );
   }

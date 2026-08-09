@@ -3,6 +3,7 @@ import { sql } from "@vercel/postgres";
 import { fetchRssEpisodes } from "@/lib/rss";
 import { fetchSiteEpisodeList, scrapeEpisodePage } from "@/lib/scraper";
 import { chunkTranscript } from "@/lib/chunker";
+import { contextualizeChunk, embedBatch, toVectorLiteral } from "@/lib/embeddings";
 
 export const maxDuration = 300; // 5 min max for Vercel serverless
 export const dynamic = "force-dynamic";
@@ -38,40 +39,42 @@ export async function GET(request: Request) {
       fetchSiteEpisodeList(),
     ]);
 
-    // Build a map of site episodes by number for matching
-    const siteMap = new Map(siteEpisodes.map((e) => [e.episodeNumber, e]));
-
     // Get existing episode numbers from DB
     const existing = await sql`SELECT episode_number FROM episodes`;
     const existingNumbers = new Set(
       existing.rows.map((r) => r.episode_number as number)
     );
 
-    // Match RSS episodes to site URLs, filtering out already-ingested ones
-    const toIngest: { rssTitle: string; episodeNumber: number; siteUrl: string }[] = [];
+    // The site listing drives discovery, not the RSS feed. An episode is only
+    // ingestable if it has a page to scrape, and the feed turned out to be the
+    // narrower source — episodes 11-14 are on the site but absent from RSS, so
+    // an RSS-driven loop could never reach them. RSS is now only used to flag
+    // published episodes the site hasn't listed.
+    const toIngest: { episodeNumber: number; siteUrl: string }[] = [];
     const skipped: { title: string; reason: string }[] = [];
 
-    for (const rss of rssEpisodes) {
-      if (rss.episodeNumber === 0) {
-        skipped.push({ title: rss.title, reason: "No episode number in RSS" });
+    for (const site of siteEpisodes) {
+      if (site.episodeNumber === 0) {
+        skipped.push({ title: site.url, reason: "No episode number on site page" });
         continue;
       }
-      if (existingNumbers.has(rss.episodeNumber)) {
+      if (existingNumbers.has(site.episodeNumber)) {
         continue; // Already in DB
       }
-      const site = siteMap.get(rss.episodeNumber);
-      if (!site) {
-        skipped.push({
-          title: rss.title,
-          reason: `No matching site page for episode ${rss.episodeNumber}`,
-        });
-        continue;
-      }
       toIngest.push({
-        rssTitle: rss.title,
-        episodeNumber: rss.episodeNumber,
+        episodeNumber: site.episodeNumber,
         siteUrl: site.url,
       });
+    }
+
+    const siteNumbers = new Set(siteEpisodes.map((e) => e.episodeNumber));
+    for (const rss of rssEpisodes) {
+      if (rss.episodeNumber && !siteNumbers.has(rss.episodeNumber)) {
+        skipped.push({
+          title: rss.title,
+          reason: `In RSS but no site page for episode ${rss.episodeNumber}`,
+        });
+      }
     }
 
     if (toIngest.length === 0) {
@@ -131,14 +134,26 @@ export async function GET(request: Request) {
             };
           }
 
-          // Chunk and insert transcript chunks
+          // Chunk, embed, and insert transcript chunks. The embedding is
+          // written here rather than backfilled later — a chunk with a NULL
+          // embedding is invisible to retrieval, so a newly ingested episode
+          // would otherwise be unreachable until someone ran a script.
           let chunksCreated = 0;
           if (scraped.transcript) {
             const chunks = chunkTranscript(scraped.transcript);
-            for (const chunk of chunks) {
+            const vectors = await embedBatch(
+              chunks.map((c) => contextualizeChunk(scraped.title, c.text))
+            );
+
+            for (let i = 0; i < chunks.length; i++) {
               await sql`
-                INSERT INTO chunks (episode_id, start_position, text)
-                VALUES (${episodeId}, ${chunk.startPosition}, ${chunk.text})
+                INSERT INTO chunks (episode_id, start_position, text, embedding)
+                VALUES (
+                  ${episodeId},
+                  ${chunks[i].startPosition},
+                  ${chunks[i].text},
+                  ${toVectorLiteral(vectors[i])}::vector
+                )
               `;
               chunksCreated++;
             }

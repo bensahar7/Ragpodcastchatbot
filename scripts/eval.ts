@@ -39,19 +39,19 @@ interface EvalResult {
   verdicts: EvalVerdict[];
 }
 
-const TOP_K = 4;
+const TOP_K = 2;
 
 const anthropic = new Anthropic();
 
 async function generateAnswer(question: string, topK: number): Promise<{ answer: string; retrievedEpisodeIds: string[] }> {
   const results = await searchChunks(question, topK);
 
-  const retrievedEpisodeIds = [...new Set(results.map((r) => `ep${String(r.episodeId).padStart(2, "0")}`))];
+  const retrievedEpisodeIds = [...new Set(results.map((r) => `ep${String(r.episodeNumber).padStart(2, "0")}`))];
 
   const contextText = results
     .map((r) => {
       const trimmed = r.text.replace(/\n{2,}/g, "\n").trim();
-      return `[${r.episodeTitle}]\n${trimmed}`;
+      return `[${r.title}]\n${trimmed}`;
     })
     .join("\n---\n");
 

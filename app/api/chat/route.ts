@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { searchChunksTraced } from "@/lib/retrieval";
+import { searchChunksTraced, type SearchResult } from "@/lib/retrieval";
+import { EMBEDDING_MODEL } from "@/lib/embeddings";
 import {
   checkAndCount,
   clientIp,
@@ -9,6 +10,23 @@ import {
 } from "@/lib/ratelimit";
 import fs from "fs";
 import path from "path";
+
+const TRACES_PATH = path.resolve(process.cwd(), "traces.jsonl");
+
+/**
+ * Feeds the /api/traces viewer. Serverless filesystems are read-only outside
+ * /tmp, so this only ever worked locally — skipping it in production drops a
+ * guaranteed-to-throw sync write off the request path. Never let it fail the
+ * request.
+ */
+function appendTrace(trace: Record<string, unknown>) {
+  if (process.env.NODE_ENV === "production") return;
+  try {
+    fs.appendFileSync(TRACES_PATH, JSON.stringify(trace) + "\n", "utf-8");
+  } catch (error) {
+    console.warn("trace write skipped:", (error as Error).message);
+  }
+}
 
 // Constructed on first request, not at module load. Next imports every route
 // while collecting page data at build time, and a client built there would
@@ -20,38 +38,26 @@ function getOpenAI(): OpenAI {
 }
 
 // Keep system prompt minimal — every token costs money
-const SYSTEM_PROMPT =  `אתה עוזר של הפודקאסט "איך פותרים את זה?" — טכנולוגיה סביבתית.
+const SYSTEM_PROMPT = `אתה עוזר של הפודקאסט "איך פותרים את זה?" — טכנולוגיה סביבתית.
 
-ענה רק על סמך הקטעים שסופקו. צטט פרטים ספציפיים מהתוכן (מספרים, שמות טכנולוגיות, 
+ענה רק על סמך הקטעים שסופקו. צטט פרטים ספציפיים מהתוכן (מספרים, שמות טכנולוגיות,
 מה שהדוברים אמרו בפועל) — אל תסכם בצורה כללית.
 אם אין תשובה בקטעים — אמור זאת בפירוש, אל תמציא.
 
-כשאתה ממליץ על פרק, ספר עליו כמו שחבר היה מספר — במשפטים רציפים וטבעיים, לא 
-כרשימת שדות וכותרות. שלב באופן טבעי: שם הפרק, מי מדבר בו, ועל מה הוא עוסק — 
-רק את השדות שבאמת קיימים ב-metadata שסופק. אל תשתמש בתוויות כמו "מי מדבר:" 
+כשאתה ממליץ על פרק, ספר עליו כמו שחבר היה מספר — במשפטים רציפים וטבעיים, לא
+כרשימת שדות וכותרות. שלב באופן טבעי: שם הפרק, מי מדבר בו, ועל מה הוא עוסק —
+רק את השדות שבאמת קיימים ב-metadata שסופק. אל תשתמש בתוויות כמו "מי מדבר:"
 או "על עולם הבעיה:" — זה צריך להישמע כמו המלצה אנושית, לא מילוי טופס.
 
-אם שדה מסוים (שמות דוברים, תיאור נושא) לא קיים ב-metadata — פשוט אל תזכיר 
+אם שדה מסוים (שמות דוברים, תיאור נושא) לא קיים ב-metadata — פשוט אל תזכיר
 אותו, בלי לציין שהוא חסר. לעולם אל תמלא placeholder כמו "Guest" או "לא צוין".
 
-קישור לספוטיפיי מוצג בנפרד בסוף התשובה (לא בתוך הטקסט הרץ), רק אם spotify_url 
+קישור לספוטיפיי מוצג בנפרד בסוף התשובה (לא בתוך הטקסט הרץ), רק אם spotify_url
 קיים ב-metadata. לעולם אל תמציא קישור.
 
 אם רלוונטי ליותר מפרק אחד — ספר על כל פרק בפסקה נפרדת, באותו סגנון נרטיבי.
 
 עברית בלבד.`;
-
-const TRACES_PATH = path.resolve(process.cwd(), "traces.jsonl");
-
-function appendTrace(trace: Record<string, unknown>) {
-  // Serverless filesystems are read-only outside /tmp, so tracing is a
-  // local-dev convenience only. Never let it fail the request.
-  try {
-    fs.appendFileSync(TRACES_PATH, JSON.stringify(trace) + "\n", "utf-8");
-  } catch (error) {
-    console.warn("trace write skipped:", (error as Error).message);
-  }
-}
 
 // Origins allowed to call this API from a browser. Comma-separated env var,
 // e.g. "https://podcast.example.com,https://www.podcast.example.com".
@@ -89,6 +95,33 @@ export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers });
 }
 
+/**
+ * The metadata block the system prompt refers to. Only fields that actually
+ * have a value are emitted, because the prompt instructs the model to skip
+ * what isn't there and it can't do that if we hand it empty strings.
+ */
+function metadataLine(result: SearchResult): string {
+  const fields: string[] = [`episode: ${result.episodeNumber}`, `title: ${result.title}`];
+  if (result.guestName) fields.push(`guest: ${result.guestName}`);
+  if (result.companyName) fields.push(`company: ${result.companyName}`);
+  if (result.problemSummary) fields.push(`problem: ${result.problemSummary}`);
+  if (result.solutionSummary) fields.push(`solution: ${result.solutionSummary}`);
+  if (result.spotifyUrl) fields.push(`spotify_url: ${result.spotifyUrl}`);
+  return fields.join(" | ");
+}
+
+/** OpenAI billing exhaustion / quota, as opposed to a genuine bug. */
+function isQuotaError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { status?: number; type?: string; code?: string };
+  return (
+    e.type === "insufficient_quota" ||
+    e.code === "credit_balance_exhausted" ||
+    e.code === "insufficient_quota" ||
+    e.status === 429
+  );
+}
+
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin");
   const cors = corsHeaders(origin);
@@ -117,8 +150,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Daily caps — checked before any paid call.
-    const limit = await checkAndCount(clientIp(request.headers));
+    const t0 = Date.now();
+
+    // The rate-limit check and retrieval are independent, and both are network
+    // round-trips. Running them together rather than back to back takes the
+    // slower of the two off the critical path instead of summing them. Nothing
+    // has been *spent* yet — the paid generation call still waits on the limit.
+    const TOP_K = 2;
+    const [limit, search] = await Promise.all([
+      checkAndCount(clientIp(request.headers)),
+      searchChunksTraced(question, TOP_K),
+    ]);
+
     if (!limit.allowed) {
       return NextResponse.json(
         {
@@ -131,27 +174,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const t0 = Date.now();
-
-    // Retrieve top 4 chunks (not 6 — saves ~30% input tokens)
-    const TOP_K = 2;
-    const search = await searchChunksTraced(question, TOP_K);
     const results = search.results;
     const tRetrieval = Date.now();
+
+    if (results.length === 0) {
+      return NextResponse.json(
+        { error: "לא נמצא תוכן רלוונטי. נסו לנסח את השאלה אחרת." },
+        { status: 503, headers: cors }
+      );
+    }
 
     // Build context — compact format, strip excess whitespace
     const contextText = results
       .map((r) => {
         const trimmed = r.text.replace(/\n{2,}/g, "\n").trim();
-        return `[${r.episodeTitle}]\n${trimmed}`;
+        return `[metadata: ${metadataLine(r)}]\n${trimmed}`;
       })
       .join("\n---\n");
 
     const userMessage = `${question}\n\n${contextText}`;
-    const tPromptBuilt = Date.now();
 
-    // Built once and passed straight to the API, so what the viewer shows is
-    // literally what was sent — not a reconstruction.
     const requestBody = {
       model: "gpt-4.1-nano",
       max_tokens: 300,
@@ -162,150 +204,196 @@ export async function POST(request: NextRequest) {
       ],
     };
 
-    const tGenStart = Date.now();
-    const response = await getOpenAI().chat.completions.create(requestBody);
-    const tGenEnd = Date.now();
-
-    const rawAnswer = response.choices[0]?.message?.content ?? null;
-    const answer = rawAnswer || "";
-
     const sources = [
-      ...new Set(results.map((r) => `פרק ${r.episodeId}: ${r.episodeTitle}`)),
+      ...new Set(results.map((r) => `פרק ${r.episodeNumber}: ${r.title}`)),
     ];
 
-    // Log token usage for monitoring
-    if (response.usage) {
-      console.log(
-        `Tokens — in: ${response.usage.prompt_tokens}, out: ${response.usage.completion_tokens}, total: ${response.usage.total_tokens}`
+    const tGenStart = Date.now();
+    const stream = await getOpenAI().chat.completions.create({
+      ...requestBody,
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+
+    // Newline-delimited JSON. Sources go out first so the widget can render the
+    // citation line immediately, then answer text arrives token by token —
+    // first paint lands in well under a second instead of after generation.
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: Record<string, unknown>) =>
+          controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+
+        let answer = "";
+        let usage: unknown = null;
+
+        try {
+          send({ type: "sources", sources });
+
+          for await (const part of stream) {
+            const delta = part.choices[0]?.delta?.content;
+            if (delta) {
+              answer += delta;
+              send({ type: "delta", text: delta });
+            }
+            if (part.usage) usage = part.usage;
+          }
+
+          send({ type: "done" });
+        } catch (error) {
+          console.error("Chat stream error:", error);
+          send({ type: "error", error: "שגיאה: לא הצלחתי לעבד את השאלה." });
+        } finally {
+          controller.close();
+
+          const tGenEnd = Date.now();
+          const round = (n: number) => Math.round(n * 10000) / 10000;
+          const latency = {
+            retrieval: tRetrieval - t0,
+            embedding: search.embedMs,
+            vector_search: search.scoreMs,
+            generation: tGenEnd - tGenStart,
+            total: tGenEnd - t0,
+          };
+
+          // Always visible in `vercel logs` — this is what tells you whether a
+          // slow request was embedding, the vector query, or generation.
+          console.log(
+            JSON.stringify({ question, embedding_model: EMBEDDING_MODEL, usage, latency_ms: latency })
+          );
+
+          appendTrace({
+            timestamp: new Date().toISOString(),
+            question,
+            retrieved_chunks: results.map((r) => ({
+              chunk_id: r.chunkId,
+              episode_id: `ep${String(r.episodeNumber).padStart(2, "0")}`,
+              episode_title: r.title,
+              score: round(r.score),
+            })),
+            final_prompt: `${SYSTEM_PROMPT}\n\n${userMessage}`,
+            answer,
+            latency_ms: latency,
+            steps: [
+              {
+                name: "Question Received",
+                status: "ok",
+                input: { question },
+                output: { question },
+              },
+              {
+                name: "Embedding",
+                status: "ok",
+                latency_ms: search.embedMs,
+                input: { text: question, model: EMBEDDING_MODEL },
+                output: {
+                  dimensions: search.queryEmbedding.length,
+                  normalized: true,
+                  preview: search.queryEmbedding.slice(0, 8).map(round),
+                },
+              },
+              {
+                name: "Retrieval",
+                status: "ok",
+                latency_ms: search.scoreMs,
+                input: {
+                  store: "postgres + pgvector",
+                  embedding_dimensions: search.queryEmbedding.length,
+                  candidates_fetched: search.totalChunks,
+                  top_k: TOP_K,
+                  metric: "cosine distance (<=>)",
+                },
+                output: {
+                  candidates: search.candidates.map((c, i) => ({
+                    rank: i + 1,
+                    chunk_id: c.chunkId,
+                    episode_id: `ep${String(c.episodeNumber).padStart(2, "0")}`,
+                    episode_title: c.episodeTitle,
+                    score: round(c.score),
+                    preview: c.preview,
+                    selected: i < TOP_K,
+                  })),
+                  selected: results.map((r, i) => ({
+                    rank: i + 1,
+                    chunk_id: r.chunkId,
+                    episode_id: `ep${String(r.episodeNumber).padStart(2, "0")}`,
+                    episode_title: r.title,
+                    score: round(r.score),
+                    chunk_text: r.text,
+                  })),
+                },
+              },
+              {
+                name: "Prompt Construction",
+                status: "ok",
+                input: {
+                  system_prompt_template: SYSTEM_PROMPT,
+                  question,
+                  chunks_used: results.length,
+                  context_chars: contextText.length,
+                },
+                output: {
+                  request_params: {
+                    model: requestBody.model,
+                    temperature: requestBody.temperature,
+                    max_tokens: requestBody.max_tokens,
+                  },
+                  exact_prompt_sent: requestBody.messages
+                    .map((m) => `### ${m.role}\n${m.content}`)
+                    .join("\n\n"),
+                },
+              },
+              {
+                name: "Generation",
+                status: "ok",
+                latency_ms: tGenEnd - tGenStart,
+                input: {
+                  source: "the exact prompt from step 4",
+                  model: requestBody.model,
+                  temperature: requestBody.temperature,
+                  max_tokens: requestBody.max_tokens,
+                  streamed: true,
+                },
+                output: { raw_content: answer, usage },
+              },
+              {
+                name: "Post-processing",
+                status: "passthrough",
+                note: "Answer text is streamed through untransformed; source labels are derived from the retrieved chunks.",
+                input: { raw_content: answer },
+                output: { answer, sources },
+              },
+            ],
+          });
+        }
+      },
+    });
+
+    return new Response(body, {
+      headers: {
+        ...cors,
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        // Vercel's edge buffers responses without this, which would defeat
+        // streaming entirely — the user would still wait for the last token.
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch (error) {
+    console.error("Chat API error:", error);
+
+    // A drained OpenAI balance is an operational state, not a code fault: it
+    // surfaces here as a 429/insufficient_quota from the embedding call before
+    // retrieval even runs. Reporting it as a 500 sent the widget a generic
+    // "couldn't process the question" and left no trace in the browser of what
+    // was actually wrong.
+    if (isQuotaError(error)) {
+      return NextResponse.json(
+        { error: "השירות אינו זמין כרגע. נסו שוב מאוחר יותר." },
+        { status: 503, headers: cors }
       );
     }
 
-    const round = (n: number) => Math.round(n * 10000) / 10000;
-
-    // Write full trace — one entry per pipeline step, each with its own
-    // input/output, so the viewer can render the chain node by node.
-    appendTrace({
-      timestamp: new Date().toISOString(),
-      question,
-      retrieved_chunks: results.map((r) => ({
-        chunk_id: `ep${r.episodeId}_chunk${r.chunkIndex}`,
-        episode_id: `ep${String(r.episodeId).padStart(2, "0")}`,
-        episode_title: r.episodeTitle,
-        score: round(r.score),
-      })),
-      final_prompt: `${SYSTEM_PROMPT}\n\n${userMessage}`,
-      answer,
-      latency_ms: {
-        retrieval: tRetrieval - t0,
-        generation: tGenEnd - tGenStart,
-        total: tGenEnd - t0,
-      },
-      steps: [
-        {
-          name: "Question Received",
-          status: "ok",
-          input: { question },
-          output: { question },
-        },
-        {
-          name: "Embedding",
-          status: "ok",
-          latency_ms: search.embedMs,
-          input: {
-            text: question,
-            // e5 requires this prefix; worth seeing that it was applied
-            embedded_text: search.embeddedQuery,
-            model: "Xenova/multilingual-e5-small",
-          },
-          output: {
-            dimensions: search.queryEmbedding.length,
-            normalized: true,
-            preview: search.queryEmbedding.slice(0, 8).map(round),
-          },
-        },
-        {
-          name: "Retrieval",
-          status: "ok",
-          latency_ms: tRetrieval - t0,
-          input: {
-            embedding_dimensions: search.queryEmbedding.length,
-            embedding_preview: search.queryEmbedding.slice(0, 8).map(round),
-            total_chunks_in_index: search.candidates.length,
-            top_k: TOP_K,
-            metric: "cosine similarity",
-            scoring_ms: search.scoreMs,
-          },
-          output: {
-            candidates: search.candidates.map((c, i) => ({
-              rank: i + 1,
-              episode_id: `ep${String(c.episodeId).padStart(2, "0")}`,
-              episode_title: c.episodeTitle,
-              chunk_index: c.chunkIndex,
-              score: round(c.score),
-              preview: c.preview,
-              selected: i < TOP_K,
-            })),
-            selected: results.map((r, i) => ({
-              rank: i + 1,
-              episode_id: `ep${String(r.episodeId).padStart(2, "0")}`,
-              episode_title: r.episodeTitle,
-              chunk_index: r.chunkIndex,
-              score: round(r.score),
-              chunk_text: r.text,
-            })),
-          },
-        },
-        {
-          name: "Prompt Construction",
-          status: "ok",
-          latency_ms: tPromptBuilt - tRetrieval,
-          input: {
-            system_prompt_template: SYSTEM_PROMPT,
-            question,
-            chunks_used: results.length,
-            context_chars: contextText.length,
-          },
-          output: {
-            request_params: {
-              model: requestBody.model,
-              temperature: requestBody.temperature,
-              max_tokens: requestBody.max_tokens,
-            },
-            exact_prompt_sent: requestBody.messages
-              .map((m) => `### ${m.role}\n${m.content}`)
-              .join("\n\n"),
-          },
-        },
-        {
-          name: "Generation",
-          status: "ok",
-          latency_ms: tGenEnd - tGenStart,
-          input: {
-            source: "the exact prompt from step 4",
-            model: requestBody.model,
-            temperature: requestBody.temperature,
-            max_tokens: requestBody.max_tokens,
-            prompt_chars: SYSTEM_PROMPT.length + userMessage.length,
-          },
-          output: {
-            raw_content: rawAnswer,
-            finish_reason: response.choices[0]?.finish_reason ?? null,
-            usage: response.usage ?? null,
-          },
-        },
-        {
-          name: "Post-processing",
-          status: "passthrough",
-          note: "No transformation of the answer text — empty content is coerced to \"\" and source labels are derived from the retrieved chunks.",
-          input: { raw_content: rawAnswer },
-          output: { answer, sources },
-        },
-      ],
-    });
-
-    return NextResponse.json({ answer, sources }, { headers: cors });
-  } catch (error) {
-    console.error("Chat API error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: cors }

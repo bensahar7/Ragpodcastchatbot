@@ -1,19 +1,8 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  // @xenova/transformers loads onnxruntime-node, which is a native addon.
-  // Bundling it breaks the .node/.so resolution, so keep it external...
-  serverExternalPackages: ["@xenova/transformers", "onnxruntime-node", "sharp"],
-
-  // ...and make sure the native binaries actually ship with the function.
-  // Without this the deployed route dies with
-  //   libonnxruntime.so.1.14.0: cannot open shared object file
-  outputFileTracingIncludes: {
-    "/api/chat": [
-      "./node_modules/onnxruntime-node/bin/**/*",
-      "./node_modules/@xenova/transformers/**/*",
-    ],
-  },
-};
+// Embedding moved from a local onnxruntime model to the OpenAI API, so the
+// native-addon externals and the outputFileTracingIncludes that shipped
+// ~100MB of ONNX binaries with the chat function are no longer needed.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

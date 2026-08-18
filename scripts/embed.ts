@@ -1,126 +1,93 @@
-import fs from "fs";
-import path from "path";
+import { sql } from "@vercel/postgres";
+import {
+  EMBEDDING_DIMENSIONS,
+  EMBEDDING_MODEL,
+  contextualizeChunk,
+  embedBatch,
+  toVectorLiteral,
+} from "../lib/embeddings";
 
-const EPISODES_PATH = path.resolve(__dirname, "../data/episodes.json");
-const OUTPUT_PATH = path.resolve(__dirname, "../data/embeddings.json");
-const MODEL_NAME = "Xenova/multilingual-e5-small";
+/**
+ * Backfills embeddings for every chunk in Postgres that doesn't have one, then
+ * makes sure the vector index exists.
+ *
+ * Idempotent and safe to re-run: it only touches rows where embedding IS NULL,
+ * so the weekly ingest cron can insert new chunks and this fills them in.
+ * Pass --all to re-embed everything (needed if the embedding model changes).
+ */
 
-interface Episode {
-  id: number;
-  title: string;
-  topic: string;
-  guests: string[];
-  transcript: string;
-}
+const BATCH_SIZE = 96;
+const reembedAll = process.argv.includes("--all");
 
-interface Chunk {
-  episodeId: number;
-  episodeTitle: string;
-  chunkIndex: number;
+interface PendingChunk {
+  id: string;
   text: string;
+  title: string;
 }
 
-interface EmbeddedChunk extends Chunk {
-  embedding: number[];
-}
-
-function chunkTranscript(episode: Episode): Chunk[] {
-  const lines = episode.transcript.split("\n").filter((l) => l.trim());
-  const chunks: Chunk[] = [];
-  let currentText = "";
-  let chunkIndex = 0;
-
-  for (const line of lines) {
-    const isSpeakerLine = /^\[.+\]:/.test(line);
-
-    if (isSpeakerLine && currentText.length > 400) {
-      // Flush current chunk
-      chunks.push({
-        episodeId: episode.id,
-        episodeTitle: episode.title,
-        chunkIndex: chunkIndex++,
-        text: currentText.trim(),
-      });
-      currentText = line + "\n";
-    } else {
-      currentText += line + "\n";
-
-      // Force split if chunk gets very long
-      if (currentText.length > 1500) {
-        chunks.push({
-          episodeId: episode.id,
-          episodeTitle: episode.title,
-          chunkIndex: chunkIndex++,
-          text: currentText.trim(),
-        });
-        currentText = "";
-      }
-    }
-  }
-
-  if (currentText.trim()) {
-    chunks.push({
-      episodeId: episode.id,
-      episodeTitle: episode.title,
-      chunkIndex: chunkIndex++,
-      text: currentText.trim(),
-    });
-  }
-
-  return chunks;
+async function ensureIndex() {
+  await sql`CREATE EXTENSION IF NOT EXISTS vector`;
+  // Cosine, matching the `<=>` operator the retriever orders by. At a few
+  // hundred chunks a sequential scan is already fast, but the index keeps the
+  // query flat as episodes accumulate.
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_chunks_embedding
+    ON chunks USING hnsw (embedding vector_cosine_ops)
+  `;
 }
 
 async function main() {
-  if (!fs.existsSync(EPISODES_PATH)) {
-    console.error(
-      "episodes.json not found. Run the ingest script first: npm run ingest"
+  console.log(`Model: ${EMBEDDING_MODEL} @ ${EMBEDDING_DIMENSIONS} dimensions`);
+
+  if (reembedAll) {
+    console.log("--all: clearing existing embeddings first");
+    await sql`UPDATE chunks SET embedding = NULL`;
+  }
+
+  const { rows: pending } = await sql<PendingChunk>`
+    SELECT c.id, c.text, e.title
+    FROM chunks c JOIN episodes e ON e.id = c.episode_id
+    WHERE c.embedding IS NULL
+    ORDER BY c.created_at
+  `;
+
+  if (pending.length === 0) {
+    console.log("Every chunk already has an embedding.");
+    await ensureIndex();
+    return;
+  }
+
+  console.log(`Embedding ${pending.length} chunks...`);
+
+  for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+    const batch = pending.slice(i, i + BATCH_SIZE);
+    // The e5-specific "passage: " prefix is gone; the episode title takes its
+    // place as the chunk's topical anchor. See contextualizeChunk.
+    const vectors = await embedBatch(
+      batch.map((c) => contextualizeChunk(c.title, c.text))
     );
-    process.exit(1);
-  }
 
-  const episodes: Episode[] = JSON.parse(
-    fs.readFileSync(EPISODES_PATH, "utf-8")
-  );
-  console.log(`Loaded ${episodes.length} episodes`);
-
-  // Chunk all episodes
-  const allChunks: Chunk[] = [];
-  for (const ep of episodes) {
-    const chunks = chunkTranscript(ep);
-    allChunks.push(...chunks);
-    console.log(`Episode ${ep.id}: ${chunks.length} chunks`);
-  }
-  console.log(`Total chunks: ${allChunks.length}`);
-
-  // Load the embedding model
-  console.log(`\nLoading model: ${MODEL_NAME}...`);
-  const { pipeline } = await import("@xenova/transformers");
-  const extractor = await pipeline("feature-extraction", MODEL_NAME);
-
-  // Embed all chunks
-  const embeddedChunks: EmbeddedChunk[] = [];
-  for (let i = 0; i < allChunks.length; i++) {
-    const chunk = allChunks[i];
-    // multilingual-e5 expects "passage: " prefix for documents
-    const input = `passage: ${chunk.text}`;
-    const output = await extractor(input, {
-      pooling: "mean",
-      normalize: true,
-    });
-    const embedding = Array.from(output.data as Float32Array);
-
-    embeddedChunks.push({ ...chunk, embedding });
-
-    if ((i + 1) % 10 === 0 || i === allChunks.length - 1) {
-      console.log(`Embedded ${i + 1}/${allChunks.length} chunks`);
+    for (let j = 0; j < batch.length; j++) {
+      await sql`
+        UPDATE chunks
+        SET embedding = ${toVectorLiteral(vectors[j])}::vector,
+            updated_at = now()
+        WHERE id = ${batch[j].id}
+      `;
     }
+
+    console.log(`  ${Math.min(i + BATCH_SIZE, pending.length)}/${pending.length}`);
   }
 
-  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(embeddedChunks), "utf-8");
-  const sizeMB = (fs.statSync(OUTPUT_PATH).size / 1024 / 1024).toFixed(1);
-  console.log(
-    `\nWrote ${embeddedChunks.length} embedded chunks to ${OUTPUT_PATH} (${sizeMB} MB)`
-  );
+  await ensureIndex();
+
+  const { rows } = await sql<{ total: number; embedded: number }>`
+    SELECT count(*)::int AS total, count(embedding)::int AS embedded FROM chunks
+  `;
+  console.log(`\nDone — ${rows[0].embedded}/${rows[0].total} chunks embedded.`);
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

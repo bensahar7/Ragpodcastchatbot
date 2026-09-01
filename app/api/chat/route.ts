@@ -40,22 +40,16 @@ function getOpenAI(): OpenAI {
 // Keep system prompt minimal — every token costs money
 const SYSTEM_PROMPT = `אתה עוזר של הפודקאסט "איך פותרים את זה?" — טכנולוגיה סביבתית.
 
-ענה רק על סמך הקטעים שסופקו. צטט פרטים ספציפיים מהתוכן (מספרים, שמות טכנולוגיות,
-מה שהדוברים אמרו בפועל) — אל תסכם בצורה כללית.
+ענה בקצרה — 2-3 משפטים לכל פרק, לא יותר. ענה רק על סמך הקטעים שסופקו.
 אם אין תשובה בקטעים — אמור זאת בפירוש, אל תמציא.
 
-כשאתה ממליץ על פרק, ספר עליו כמו שחבר היה מספר — במשפטים רציפים וטבעיים, לא
-כרשימת שדות וכותרות. שלב באופן טבעי: שם הפרק, מי מדבר בו, ועל מה הוא עוסק —
-רק את השדות שבאמת קיימים ב-metadata שסופק. אל תשתמש בתוויות כמו "מי מדבר:"
-או "על עולם הבעיה:" — זה צריך להישמע כמו המלצה אנושית, לא מילוי טופס.
+לכל פרק שאתה מזכיר, הוסף בסוף קישור לדף הפרק (מתוך שדה page_url ב-metadata).
+אם יש גם spotify_url — הוסף אותו גם. לעולם אל תמציא קישור.
 
-אם שדה מסוים (שמות דוברים, תיאור נושא) לא קיים ב-metadata — פשוט אל תזכיר
-אותו, בלי לציין שהוא חסר. לעולם אל תמלא placeholder כמו "Guest" או "לא צוין".
+סגנון: טבעי וידידותי, כמו חבר שממליץ. לא רשימות שדות, לא תוויות כמו "נושא:" או "אורח:".
+אם שדה חסר ב-metadata — פשוט אל תזכיר אותו.
 
-קישור לספוטיפיי מוצג בנפרד בסוף התשובה (לא בתוך הטקסט הרץ), רק אם spotify_url
-קיים ב-metadata. לעולם אל תמציא קישור.
-
-אם רלוונטי ליותר מפרק אחד — ספר על כל פרק בפסקה נפרדת, באותו סגנון נרטיבי.
+אם רלוונטי ליותר מפרק אחד — פסקה קצרה לכל פרק.
 
 עברית בלבד.`;
 
@@ -106,6 +100,7 @@ function metadataLine(result: SearchResult): string {
   if (result.companyName) fields.push(`company: ${result.companyName}`);
   if (result.problemSummary) fields.push(`problem: ${result.problemSummary}`);
   if (result.solutionSummary) fields.push(`solution: ${result.solutionSummary}`);
+  if (result.url) fields.push(`page_url: ${result.url}`);
   if (result.spotifyUrl) fields.push(`spotify_url: ${result.spotifyUrl}`);
   return fields.join(" | ");
 }
